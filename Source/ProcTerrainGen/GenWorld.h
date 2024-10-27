@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "ProceduralMeshComponent.h"
+#include "KismetProceduralMeshLibrary.h"
 #include "GenHeight.h"
 #include "GenWorld.generated.h"
 
@@ -39,6 +40,12 @@ private:
 	int32 yVertexCount = 2;
 
 	UPROPERTY(EditAnywhere)
+	uint32 xSections = 1;
+
+	UPROPERTY(EditAnywhere)
+	uint32 ySections = 1;
+
+	UPROPERTY(EditAnywhere)
 	float edgeSize = 100.f;
 
 	UPROPERTY(EditAnywhere)
@@ -49,4 +56,6 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintGetter = GetHeightGenerator)
 	UGenHeight* HeightGenerator = nullptr;
+
+	void GenerateSection(uint32 xSection, uint32 ySection);
 };

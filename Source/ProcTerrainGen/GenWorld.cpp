@@ -25,7 +25,12 @@ void AGenWorld::BeginPlay()
 
 	GenerateTerrain();
 
-	if (terrainMaterial) TerrainMesh->SetMaterial(0, terrainMaterial);
+	if (!terrainMaterial) return;
+
+	for (uint32 i = 0; i < xSections * ySections; i++)
+	{
+		TerrainMesh->SetMaterial(i, terrainMaterial);
+	}
 }
 
 // Called every frame
@@ -38,12 +43,27 @@ void AGenWorld::GenerateTerrain()
 {
 	TerrainMesh->ClearAllMeshSections();
 
+	HeightGenerator->Initialize(xSections, ySections, xVertexCount, yVertexCount);
+
+	for (uint32 y = 0; y < ySections; y++)
+	{
+		for (uint32 x = 0; x < xSections; x++)
+		{
+			GenerateSection(x, y);
+		}
+	}
+}
+
+void AGenWorld::GenerateSection(uint32 xSection, uint32 ySection)
+{
+	uint32 sectionIndex = ySection * ySections + xSection;
+
 	TArray<FVector> vertices;
 	TArray<int32> triangles;
 	TArray<FVector2D> uvs;
 
-	HeightGenerator->Initialize(xVertexCount, yVertexCount);
-	TArray<float>& heightData = HeightGenerator->GenerateHeight();
+	TArray<float> heightData;
+	HeightGenerator->GenerateHeight(xSection, ySection, heightData);
 
 	//Create vertex and UV arrays
 	for (int32 y = 0; y < yVertexCount; y++)
@@ -53,12 +73,15 @@ void AGenWorld::GenerateTerrain()
 			float xValue = x * edgeSize;
 			float yValue = y * edgeSize;
 
+			xValue += xSection * (xVertexCount - 1) * edgeSize;
+			yValue += ySection * (yVertexCount - 1) * edgeSize;
+
 			float heightValue = heightData[y * xVertexCount + x];
 
 			FVector newVertex(xValue, yValue, heightValue);
 			vertices.Add(newVertex);
 
-			FVector2D uvCoord(float(x % 2), float(y % 2));
+			FVector2D uvCoord((float)x, (float)y);
 			uvs.Add(uvCoord);
 		}
 	}
@@ -69,7 +92,7 @@ void AGenWorld::GenerateTerrain()
 		for (int32 x = 0; x < xVertexCount - 1; x++)
 		{
 			int32 startIndex = y * xVertexCount + x;
-			
+
 			triangles.Add(startIndex); //(0,0)
 			triangles.Add(startIndex + xVertexCount); //(0, 1)
 			triangles.Add(startIndex + 1); //(1,0)
@@ -80,5 +103,15 @@ void AGenWorld::GenerateTerrain()
 		}
 	}
 
-	TerrainMesh->CreateMeshSection(0, vertices, triangles, TArray<FVector>(), uvs, TArray<FColor>(), TArray<FProcMeshTangent>(), true);
+	TerrainMesh->CreateMeshSection(sectionIndex, vertices, triangles, TArray<FVector>(), uvs, TArray<FColor>(), TArray<FProcMeshTangent>(), true);
+
+	//AsyncTask(ENamedThreads::AnyHiPriThreadNormalTask, [=, this]()
+	//	{
+	//		//Hangs >128x128, crashes >256x256	
+	//		TArray<FVector> normals;
+	//		TArray<FProcMeshTangent> tangents;
+	//		UKismetProceduralMeshLibrary::CalculateTangentsForMesh(vertices, triangles, uvs, normals, tangents);
+
+	//		TerrainMesh->UpdateMeshSection(sectionIndex, vertices, normals, uvs, TArray<FColor>(), tangents);
+	//	});
 }
