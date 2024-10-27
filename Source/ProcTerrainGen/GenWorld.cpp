@@ -36,6 +36,8 @@ void AGenWorld::Tick(float DeltaTime)
 
 void AGenWorld::GenerateTerrain()
 {
+	TerrainMesh->ClearAllMeshSections();
+
 	TArray<FVector> vertices;
 	TArray<int32> triangles;
 	TArray<FVector2D> uvs;

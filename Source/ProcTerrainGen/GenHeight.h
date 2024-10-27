@@ -7,6 +7,15 @@
 #include "Engine/Texture2D.h"
 #include "GenHeight.generated.h"
 
+USTRUCT(BlueprintType)
+struct FHeightGeneratorOptions
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite)
+	float seed = 0.f;
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FHeightmapTextureUpdated, UTexture2D*, heightmapTexture);
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
@@ -27,6 +36,9 @@ public:
 	UFUNCTION(BlueprintCallable)
 	UTexture2D* GetHeightmapTexture() const { return HeightmapTexture; };
 
+	UFUNCTION(BlueprintCallable)
+	void SetGenerationOptions(FHeightGeneratorOptions options) { GenOptions = options; }
+
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
@@ -40,4 +52,7 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintGetter = GetHeightmapTexture)
 	UTexture2D* HeightmapTexture = nullptr;
+
+	UPROPERTY(BlueprintSetter = SetGenerationOptions)
+	FHeightGeneratorOptions GenOptions;
 };

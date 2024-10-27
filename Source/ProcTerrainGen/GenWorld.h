@@ -26,6 +26,9 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	
 	UFUNCTION(BlueprintCallable)
+	void GenerateTerrain();
+
+	UFUNCTION(BlueprintCallable)
 	UGenHeight* GetHeightGenerator() const { return HeightGenerator; };
 
 private:
@@ -46,6 +49,4 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintGetter = GetHeightGenerator)
 	UGenHeight* HeightGenerator = nullptr;
-
-	void GenerateTerrain();
 };

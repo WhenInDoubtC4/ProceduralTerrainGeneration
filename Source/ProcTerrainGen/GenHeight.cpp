@@ -22,7 +22,7 @@ void UGenHeight::Initialize(uint32 width, uint32 height)
 }
 
 TArray<float>& UGenHeight::GenerateHeight()
-{
+{	
 	for (uint32 y = 0; y < ySize; y++)
 	{
 		for (uint32 x = 0; x < xSize; x++)
@@ -31,6 +31,8 @@ TArray<float>& UGenHeight::GenerateHeight()
 
 			position *= .01f;
 			position += .1f * FVector2D::UnitVector;
+
+			position += GenOptions.seed * FVector2D::UnitVector;
 
 			float heightValue = FMath::PerlinNoise2D(position) * 10000.f;
 			HeightData.Add(heightValue);
@@ -52,7 +54,7 @@ void UGenHeight::BeginPlay()
 void UGenHeight::DrawTexture()
 {
 	//Even though a R8 format would be the most efficiet, render as RGB so that it shows up ok in the UI
-	HeightmapTexture = UTexture2D::CreateTransient(xSize, ySize, EPixelFormat::PF_R8G8B8A8, "AAAAA");
+	HeightmapTexture = UTexture2D::CreateTransient(xSize, ySize, EPixelFormat::PF_R8G8B8A8, "Heightmap texture");
 	HeightmapTexture->MipGenSettings = TextureMipGenSettings::TMGS_NoMipmaps;
 	
 	FByteBulkData& textureData = HeightmapTexture->GetPlatformData()->Mips[0].BulkData;
