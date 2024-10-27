@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "ProceduralMeshComponent.h"
+#include "GenHeight.h"
 #include "GenWorld.generated.h"
 
 UCLASS()
@@ -23,6 +24,9 @@ protected:
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
+	
+	UFUNCTION(BlueprintCallable)
+	UGenHeight* GetHeightGenerator() const { return HeightGenerator; };
 
 private:
 	UPROPERTY(EditAnywhere)
@@ -33,8 +37,15 @@ private:
 
 	UPROPERTY(EditAnywhere)
 	float edgeSize = 100.f;
+
+	UPROPERTY(EditAnywhere)
+	UMaterialInterface* terrainMaterial = nullptr;
 	
-	UProceduralMeshComponent* TerrainMesh;
+	UPROPERTY(VisibleAnywhere)
+	UProceduralMeshComponent* TerrainMesh = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintGetter = GetHeightGenerator)
+	UGenHeight* HeightGenerator = nullptr;
 
 	void GenerateTerrain();
 };
