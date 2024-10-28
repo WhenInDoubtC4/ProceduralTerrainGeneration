@@ -23,14 +23,10 @@ void AGenWorld::BeginPlay()
 {
 	Super::BeginPlay();
 
+	TerrainSectionReady.AddUObject(this, &AGenWorld::OnNextSectionReady);
+	AllTerrainSectionsReady.AddUObject(this, &AGenWorld::OnAllTerrainSectionsReady);
+
 	GenerateTerrain();
-
-	if (!terrainMaterial) return;
-
-	for (uint32 i = 0; i < xSections * ySections; i++)
-	{
-		TerrainMesh->SetMaterial(i, terrainMaterial);
-	}
 }
 
 // Called every frame
@@ -49,69 +45,138 @@ void AGenWorld::GenerateTerrain()
 	{
 		for (uint32 x = 0; x < xSections; x++)
 		{
-			GenerateSection(x, y);
+			SectionQueue.Enqueue({x, y});
 		}
 	}
+
+	GenerateNextSection();
 }
 
-void AGenWorld::GenerateSection(uint32 xSection, uint32 ySection)
+void AGenWorld::GenerateNextSection()
 {
-	uint32 sectionIndex = ySection * ySections + xSection;
-
-	TArray<FVector> vertices;
-	TArray<int32> triangles;
-	TArray<FVector2D> uvs;
-
-	TArray<float> heightData;
-	HeightGenerator->GenerateHeight(xSection, ySection, heightData);
-
-	//Create vertex and UV arrays
-	for (int32 y = 0; y < yVertexCount; y++)
+	vertices.Empty();
+	triangles.Empty();
+	uvs.Empty();
+	//normals.Empty();
+	//tangents.Empty();
+	
+	//All sections generated
+	if (SectionQueue.IsEmpty())
 	{
-		for (int32 x = 0; x < xVertexCount; x++)
-		{
-			float xValue = x * edgeSize;
-			float yValue = y * edgeSize;
-
-			xValue += xSection * (xVertexCount - 1) * edgeSize;
-			yValue += ySection * (yVertexCount - 1) * edgeSize;
-
-			float heightValue = heightData[y * xVertexCount + x];
-
-			FVector newVertex(xValue, yValue, heightValue);
-			vertices.Add(newVertex);
-
-			FVector2D uvCoord((float)x, (float)y);
-			uvs.Add(uvCoord);
-		}
+		HeightGenerator->DrawTexture();
+		AllTerrainSectionsReady.Broadcast();
+		return;
 	}
 
-	//Create triangles (ccw winding order)
-	for (int32 y = 0; y < yVertexCount - 1; y++)
+	TPair<uint32, uint32> section;
+	SectionQueue.Dequeue(section);
+
+	uint32 xSection = section.Key;
+	uint32 ySection = section.Value;
+
+	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [=, this]()
 	{
-		for (int32 x = 0; x < xVertexCount - 1; x++)
+		sectionIndex = ySection * ySections + xSection;
+
+		TArray<float> heightData;
+		HeightGenerator->GenerateHeight(xSection, ySection, heightData);
+
+		//Create vertex and UV arrays
+		for (int32 y = 0; y < yVertexCount; y++)
 		{
-			int32 startIndex = y * xVertexCount + x;
+			for (int32 x = 0; x < xVertexCount; x++)
+			{
+				float xValue = x * edgeSize;
+				float yValue = y * edgeSize;
 
-			triangles.Add(startIndex); //(0,0)
-			triangles.Add(startIndex + xVertexCount); //(0, 1)
-			triangles.Add(startIndex + 1); //(1,0)
+				xValue += xSection * (xVertexCount - 1) * edgeSize;
+				yValue += ySection * (yVertexCount - 1) * edgeSize;
 
-			triangles.Add(startIndex + xVertexCount); //(0, 1)
-			triangles.Add(startIndex + xVertexCount + 1); // (1, 1)
-			triangles.Add(startIndex + 1); //(1, 0)
+				float heightValue = heightData[y * xVertexCount + x];
+
+				FVector newVertex(xValue, yValue, heightValue);
+				vertices.Add(newVertex);
+
+				FVector2D uvCoord((float)x, (float)y);
+				uvs.Add(uvCoord);
+			}
 		}
+
+		//Create triangles (ccw winding order)
+		for (int32 y = 0; y < yVertexCount - 1; y++)
+		{
+			for (int32 x = 0; x < xVertexCount - 1; x++)
+			{
+				int32 startIndex = y * xVertexCount + x;
+
+				triangles.Add(startIndex); //(0,0)
+				triangles.Add(startIndex + xVertexCount); //(0, 1)
+				triangles.Add(startIndex + 1); //(1,0)
+
+				triangles.Add(startIndex + xVertexCount); //(0, 1)
+				triangles.Add(startIndex + xVertexCount + 1); // (1, 1)
+				triangles.Add(startIndex + 1); //(1, 0)
+			}
+		}
+		
+		AsyncTask(ENamedThreads::GameThread, [&]()
+		{
+			TerrainSectionReady.Broadcast();
+		});
+	});
+}
+
+void AGenWorld::OnNextSectionReady()
+{
+	TerrainMesh->CreateMeshSection(sectionIndex, vertices, triangles, normals, uvs, TArray<FColor>(), tangents, true);
+	if (terrainMaterial) TerrainMesh->SetMaterial(sectionIndex, terrainMaterial);
+
+	GenerateNextSection();
+}
+
+void AGenWorld::OnAllTerrainSectionsReady()
+{
+	for (uint32 i = 0; i < xSections * ySections; i++) TBNQueue.Enqueue(i);
+
+	GenerateNextTBN();
+}
+
+void AGenWorld::GenerateNextTBN()
+{
+	normals.Empty();
+	tangents.Empty();
+
+	if (TBNQueue.IsEmpty()) return;
+
+	uint32 nextSectionIndex;
+	TBNQueue.Dequeue(nextSectionIndex);
+
+	FProcMeshSection* currentSection = TerrainMesh->GetProcMeshSection(nextSectionIndex);
+
+	TArray<FVector> extracedVertices;
+	TArray<FVector2D> extracedUVs;
+	TArray<int32> extracedTriangles;
+
+	for (const FProcMeshVertex& currentVertexData : currentSection->ProcVertexBuffer)
+	{
+		extracedVertices.Add(currentVertexData.Position);
+		extracedUVs.Add(currentVertexData.UV0);
 	}
 
-	TerrainMesh->CreateMeshSection(sectionIndex, vertices, triangles, TArray<FVector>(), uvs, TArray<FColor>(), TArray<FProcMeshTangent>(), true);
+	//Stupid! (but necessary)
+	for (const uint32& index : currentSection->ProcIndexBuffer)
+	{
+		extracedTriangles.Add(index);
+	}
 
-	//AsyncTask(ENamedThreads::AnyHiPriThreadNormalTask, [=, this]()
-	//	{
-	//		//Hangs >128x128, crashes >256x256	
-	//		TArray<FVector> normals;
-	//		TArray<FProcMeshTangent> tangents;
-	//		UKismetProceduralMeshLibrary::CalculateTangentsForMesh(vertices, triangles, uvs, normals, tangents);
+	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [=, this]
+	{
+		UKismetProceduralMeshLibrary::CalculateTangentsForMesh(extracedVertices, extracedTriangles, extracedUVs, normals, tangents);
 
-	//		TerrainMesh->UpdateMeshSection(sectionIndex, vertices, normals, uvs, TArray<FColor>(), tangents);
-	//	});
+		AsyncTask(ENamedThreads::GameThread, [=, this]
+		{
+			TerrainMesh->UpdateMeshSection(nextSectionIndex, extracedVertices, normals, extracedUVs, TArray<FColor>(), tangents);
+			GenerateNextTBN();
+		});
+	});
 }

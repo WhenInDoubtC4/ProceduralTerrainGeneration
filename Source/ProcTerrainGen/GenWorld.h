@@ -9,6 +9,9 @@
 #include "GenHeight.h"
 #include "GenWorld.generated.h"
 
+DECLARE_MULTICAST_DELEGATE(FTerrainSectionReady);
+DECLARE_MULTICAST_DELEGATE(FAllTerrainSectionsReady);
+
 UCLASS()
 class PROCTERRAINGEN_API AGenWorld : public AActor
 {
@@ -57,5 +60,20 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintGetter = GetHeightGenerator)
 	UGenHeight* HeightGenerator = nullptr;
 
-	void GenerateSection(uint32 xSection, uint32 ySection);
+	TQueue<TPair<uint32, uint32>> SectionQueue;
+	void GenerateNextSection();
+	void OnNextSectionReady();
+	void OnAllTerrainSectionsReady();
+	TQueue<uint32> TBNQueue;
+	void GenerateNextTBN();
+
+	FTerrainSectionReady TerrainSectionReady;
+	uint32 sectionIndex;
+	TArray<FVector> vertices;
+	TArray<int32> triangles;
+	TArray<FVector2D> uvs;
+	
+	FAllTerrainSectionsReady AllTerrainSectionsReady;
+	TArray<FVector> normals;
+	TArray<FProcMeshTangent> tangents;
 };

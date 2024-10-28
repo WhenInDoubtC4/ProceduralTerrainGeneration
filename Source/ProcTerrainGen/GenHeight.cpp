@@ -48,8 +48,6 @@ TArray<float>& UGenHeight::GenerateHeight(uint32 xSection, uint32 ySection, TArr
 		}
 	}
 
-	DrawTexture();
-
 	return HeightData;
 }
 

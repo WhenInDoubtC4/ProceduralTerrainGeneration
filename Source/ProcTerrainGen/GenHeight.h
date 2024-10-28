@@ -39,6 +39,7 @@ public:
 
 	void Initialize(uint32 xSectionCount, uint32 ySectionCount, uint32 sectionWidth, uint32 sectionHeight);
 	TArray<float>& GenerateHeight(uint32 xSection, uint32 ySection, TArray<float>& outLocalHeightData);
+	void DrawTexture();
 
 	UPROPERTY(BlueprintAssignable)
 	FHeightmapTextureUpdated OnHeightmapTextureUpdated;
@@ -59,8 +60,6 @@ private:
 	uint32 xSize;
 	uint32 ySize;
 	TArray<float> HeightData;
-
-	void DrawTexture();
 
 	UPROPERTY(VisibleAnywhere, BlueprintGetter = GetHeightmapTexture)
 	UTexture2D* HeightmapTexture = nullptr;
