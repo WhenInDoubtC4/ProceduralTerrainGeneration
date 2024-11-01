@@ -54,16 +54,14 @@ TArray<float>& UGenHeight::GenerateHeight(uint32 xSection, uint32 ySection, TArr
 //https://dl-acm-org.cobalt.champlain.edu/doi/10.1145/74334.74337
 void UGenHeight::GridBasedErosion()
 {
-	float waterAmount = 10.f;
+	int32 erosionIterations = 32;
+	int32 rainfallInterval = 4;
+	float rainfall = 10.f;
 
-	float Kc = .08f;
-	float Kd = .05f;
-	float Ks = .03f;
+	float Kd = .1f;
+	float Kc = 5.f;
+	float Ks = .3f;
 
-	int32 rainfallInterval = 16;
-	int32 erosionIterations = 512;
-
-	TArray<float> height;
 	TArray<float> water;
 	TArray<float> sediment;
 
@@ -73,83 +71,76 @@ void UGenHeight::GridBasedErosion()
 
 	for (int32 i = 0; i < HeightData.Num(); i++)
 	{
-		height.Add(HeightData[i]);
-		newHeight.Add(HeightData[i]);
-
-		water.Add(waterAmount);
+		water.Add(rainfall);
 		newWater.Add(0.f);
 
 		sediment.Add(0.f);
 		newSediment.Add(0.f);
+
+		newHeight.Add(0.f);
 	}
 
-	int32 totalWidth = xSections * xSize;
-	TArray<int32> deltaIndices;
-	deltaIndices.Add(-1); //Left
-	deltaIndices.Add(-totalWidth); //Top
-	deltaIndices.Add(1); //Right
-	deltaIndices.Add(totalWidth); //Bottom
+	int32 width = xSections * xSize;
+	TArray<int32> deltas;
+	deltas.Add(-1);
+	deltas.Add(1);
+	deltas.Add(-width);
+	deltas.Add(width);
 
 	for (int32 e = 0; e < erosionIterations; e++)
 	{
-		for (int32 i = 0; i < height.Num(); i++)
+		for (int32 i = 0; i < HeightData.Num(); i++)
 		{
-			float currentHeight = height[i];
-			float currentWater = water[i];
-			float currentSediment = sediment[i];
-
-			for (const int32& deltaIndex : deltaIndices)
+			for (const int32& delta : deltas)
 			{
-				int32 adjacentIndex = i + deltaIndex;
-				if (adjacentIndex < 0 || adjacentIndex >= height.Num()) continue;
+				//TODO: no wraparound
 
-				float adjacentHeight = height[adjacentIndex];
-				float adjacentWater = water[adjacentIndex];
-				float adjacentSediment = sediment[adjacentIndex];
+				int32 ai = i + delta; //Adjacent index
+				if (ai < 0 || ai >= HeightData.Num()) continue;
 
-				float waterFlow = FMath::Min(currentWater, (currentWater + currentHeight) - (adjacentWater + adjacentHeight));
+				float waterFlow = FMath::Min(water[i], (water[i] + HeightData[i]) - (water[ai] + HeightData[ai]));
 
 				if (waterFlow <= 0.f)
 				{
-					newHeight[i] = currentHeight + Kd * currentSediment;
-					newSediment[i] = (1.f - Kd) * currentSediment;
+					float kdsi = Kd * sediment[i];
+					newHeight[i] += kdsi;
+					newSediment[i] -= kdsi;
 				}
 				else
 				{
-					newWater[i] = currentWater - waterFlow;
-					newWater[adjacentIndex] = adjacentWater + waterFlow;
+					newWater[i] -= waterFlow;
+					newWater[ai] += waterFlow;
 					float c = Kc * waterFlow;
-					if (currentSediment >= c)
+
+					if (sediment[i] > c)
 					{
-						newSediment[adjacentIndex] = adjacentSediment + c;
-						newHeight[i] = currentHeight + Kd * (currentSediment - c);
-						newSediment[i] = (1.f - Kd) * (currentSediment - c);
+						newSediment[ai] += c;
+						newHeight[i] += Kd * (sediment[i] - c);
+						newSediment[i] = (1.f - Kd) * (sediment[i] - c);
 					}
 					else
 					{
-						newSediment[adjacentIndex] = adjacentSediment + currentSediment + Ks * (c - currentSediment);
-						newHeight[i] = currentHeight - Ks * (c - currentSediment);
+						newSediment[ai] += sediment[i] + Ks * (c - sediment[i]);
+						newHeight[i] -= Ks * (c - sediment[i]);
 						newSediment[i] = 0.f;
 					}
 				}
 			}
 		}
 
-		//Swap buffers
-		float rainfall = e % rainfallInterval == 0 ? waterAmount : 0.f;
-		for (int32 i = 0; i < height.Num(); i++)
+		float additionalRainfall = e % rainfallInterval == 0 ? rainfall : 0.f;
+
+		for (int32 i = 0; i < HeightData.Num(); i++)
 		{
-
-			height[i] = newHeight[i];
-			water[i] = newWater[i] + rainfall;
+			HeightData[i] += FMath::Clamp(newHeight[i], -10.f, 10.f);
+			water[i] = newWater[i] + additionalRainfall;
 			sediment[i] = newSediment[i];
-		}
-	}
 
-	//Apply height
-	for (int32 i = 0; i < height.Num(); i++)
-	{
-		HeightData[i] = height[i];
+
+			newHeight[i] = 0.f;
+			newWater[i] = 0.f;
+			newSediment[i] = 0.f;
+		}
 	}
 }
 
@@ -221,7 +212,7 @@ void UGenHeight::GlobalSmooth()
 {
 	TArray<float> newHeightData = HeightData;
 
-	int32 smoothSize = 1;
+	int32 smoothSize = 2;
 	int32 width = xSections * xSize;
 
 	for (uint32 xSec = 0; xSec < xSections; xSec++)
@@ -232,8 +223,8 @@ void UGenHeight::GlobalSmooth()
 			{
 				for (uint32 x = 0; x < xSize; x++)
 				{
-					if (xSec == 0 && x == 0) continue;
-					if (xSec == xSections - 1 && x == xSize - 1) continue;
+					//if (xSec == 0 && int32(x) + dx < 0) continue;
+					//if (xSec == xSections - 1 && x == xSize - 1) continue;
 
 					float heightSum = 0.f;
 					int32 neighbors = 0;
@@ -242,6 +233,9 @@ void UGenHeight::GlobalSmooth()
 					{
 						for (int32 dx = -smoothSize; dx <= smoothSize; dx++)
 						{
+							//No wraparound
+							if (xSec == 0 && int32(x) + dx < 0) continue;
+							if (xSec == xSections - 1 && int32(x) + dx >= int32(xSize)) continue;
 
 							int32 newIndex = GetGlobalIndex(xSec, ySec, x, y) + dy * width + dx;
 							if (newIndex < 0 || newIndex >= HeightData.Num()) continue;
@@ -431,39 +425,6 @@ void UGenHeight::ModifyHeightF(float xPos, float yPos, float diff)
 			float xDiff = 1.f - FMath::Abs(xPos - float(x));
 
 			HeightData[GetGlobalIndex(x, y)] += yDiff * xDiff * diff;
-		}
-	}
-}
-
-void UGenHeight::EnsureSectionsConnect()
-{
-	for (uint32 ySec = 1; ySec < ySections; ySec++)
-	{
-		for (uint32 xSec = 1; xSec < xSections; xSec++)
-		{
-			//Top/bottom border
-			for (uint32 i = 0; i < xSize; i++)
-			{
-				float height1 = HeightData[GetGlobalIndex(xSec, ySec - 1, 0, ySize - 1) + i];
-				float height2 = HeightData[GetGlobalIndex(xSec, ySec, 0, 0) + i];
-
-				float avg = (height1 + height2) * 0.5f;
-
-				HeightData[GetGlobalIndex(xSec, ySec - 1, 0, ySize - 1) + i] = avg;
-				HeightData[GetGlobalIndex(xSec, ySec, 0, 0) + i] = avg;
-			}
-
-			//Left-right border
-			for (uint32 i = 0; i < ySize; i++)
-			{
-				float height1 = HeightData[GetGlobalIndex(xSec - 1, ySec, 0, i) + xSize - 1];
-				float height2 = HeightData[GetGlobalIndex(xSec, ySec, 0, i)];
-
-				float avg = (height1 + height2) * 0.5f;
-
-				HeightData[GetGlobalIndex(xSec - 1, ySec, 0, i) + xSize - 1] = avg;
-				HeightData[GetGlobalIndex(xSec, ySec, 0, i)] = avg;
-			}
 		}
 	}
 }

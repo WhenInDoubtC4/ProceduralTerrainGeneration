@@ -300,9 +300,9 @@ void AGenWorld::RunGlobalFilters()
 {
 	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [=, this]
 	{
-		//HeightGenerator->GridBasedErosion();
-		HeightGenerator->ParticleBasedErosion();
-		//HeightGenerator->GlobalSmooth();
+		HeightGenerator->GridBasedErosion();
+		//HeightGenerator->ParticleBasedErosion();
+		HeightGenerator->GlobalSmooth();
 
 		AsyncTask(ENamedThreads::GameThread, [=, this]
 		{

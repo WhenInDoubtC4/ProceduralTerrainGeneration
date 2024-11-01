@@ -89,6 +89,4 @@ private:
 
 	//Helper function that modifies corresponding discrete height values
 	void ModifyHeightF(float xPos, float yPos, float diff);
-
-	void EnsureSectionsConnect();
 };
