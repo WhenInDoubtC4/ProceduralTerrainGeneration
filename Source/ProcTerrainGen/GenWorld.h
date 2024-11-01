@@ -63,7 +63,7 @@ private:
 	TQueue<TPair<uint32, uint32>> SectionQueue;
 	void GenerateNextSection();
 	void OnNextSectionReady();
-	void OnAllTerrainSectionsReady();
+	void CalculateTerrainTBN();
 	TQueue<uint32> TBNQueue;
 	void GenerateNextTBN();
 
@@ -74,6 +74,11 @@ private:
 	TArray<FVector2D> uvs;
 	
 	FAllTerrainSectionsReady AllTerrainSectionsReady;
-	TArray<FVector> normals;
-	TArray<FProcMeshTangent> tangents;
+	//TArray<FVector> normals;
+	//TArray<FProcMeshTangent> tangents;
+
+	void RunGlobalFilters();
+	void UpdateAllSectionsPost();
+	TQueue<uint32> PostSectionQueue;
+	void UpdateNextSectionPost();
 };

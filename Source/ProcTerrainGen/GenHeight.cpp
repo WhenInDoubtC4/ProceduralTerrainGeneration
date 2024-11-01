@@ -21,7 +21,9 @@ void UGenHeight::Initialize(uint32 xSectionCount, uint32 ySectionCount, uint32 s
 	ySize = sectionHeight;
 
 	uint32 arraySize = ySectionCount * sectionHeight * xSectionCount * sectionWidth;
+	
 	HeightData.Empty(arraySize);
+
 	for (uint32 i = 0; i < arraySize; i++)
 	{
 		HeightData.AddUninitialized();
@@ -30,11 +32,8 @@ void UGenHeight::Initialize(uint32 xSectionCount, uint32 ySectionCount, uint32 s
 
 TArray<float>& UGenHeight::GenerateHeight(uint32 xSection, uint32 ySection, TArray<float>& outLocalHeightData)
 {	
-	uint32 xStart = xSection * (xSize - 1);
-	uint32 yStart = ySection * (ySize - 1);
-	
-	uint32 sectionSize = xSize * ySize;
-	uint32 startIndex = ySection * xSections * sectionSize + xSection * sectionSize;
+	uint32 xStart = xSection * (xSize );
+	uint32 yStart = ySection * (ySize );
 
 	for (uint32 y = 0; y < ySize; y++)
 	{
@@ -43,7 +42,8 @@ TArray<float>& UGenHeight::GenerateHeight(uint32 xSection, uint32 ySection, TArr
 			FVector2D position(float(xStart + x), float(yStart + y));
 
 			float heightValue = CalculateHeightValue(position);
-			HeightData[ySection * xSections * xSize * ySize + y * xSections * xSize + xSection * xSize + x] = heightValue;
+			//HeightData[ySection * xSections * xSize * ySize + y * xSections * xSize + xSection * xSize + x] = heightValue;
+			HeightData[GetGlobalIndex(xSection, ySection, x, y)] = heightValue;
 			outLocalHeightData.Add(heightValue);
 		}
 	}
@@ -51,6 +51,248 @@ TArray<float>& UGenHeight::GenerateHeight(uint32 xSection, uint32 ySection, TArr
 	return HeightData;
 }
 
+//https://dl-acm-org.cobalt.champlain.edu/doi/10.1145/74334.74337
+void UGenHeight::GridBasedErosion()
+{
+	float waterAmount = 10.f;
+
+	float Kc = .08f;
+	float Kd = .05f;
+	float Ks = .03f;
+
+	int32 rainfallInterval = 16;
+	int32 erosionIterations = 512;
+
+	TArray<float> height;
+	TArray<float> water;
+	TArray<float> sediment;
+
+	TArray<float> newHeight;
+	TArray<float> newWater;
+	TArray<float> newSediment;
+
+	for (int32 i = 0; i < HeightData.Num(); i++)
+	{
+		height.Add(HeightData[i]);
+		newHeight.Add(HeightData[i]);
+
+		water.Add(waterAmount);
+		newWater.Add(0.f);
+
+		sediment.Add(0.f);
+		newSediment.Add(0.f);
+	}
+
+	int32 totalWidth = xSections * xSize;
+	TArray<int32> deltaIndices;
+	deltaIndices.Add(-1); //Left
+	deltaIndices.Add(-totalWidth); //Top
+	deltaIndices.Add(1); //Right
+	deltaIndices.Add(totalWidth); //Bottom
+
+	for (int32 e = 0; e < erosionIterations; e++)
+	{
+		for (int32 i = 0; i < height.Num(); i++)
+		{
+			float currentHeight = height[i];
+			float currentWater = water[i];
+			float currentSediment = sediment[i];
+
+			for (const int32& deltaIndex : deltaIndices)
+			{
+				int32 adjacentIndex = i + deltaIndex;
+				if (adjacentIndex < 0 || adjacentIndex >= height.Num()) continue;
+
+				float adjacentHeight = height[adjacentIndex];
+				float adjacentWater = water[adjacentIndex];
+				float adjacentSediment = sediment[adjacentIndex];
+
+				float waterFlow = FMath::Min(currentWater, (currentWater + currentHeight) - (adjacentWater + adjacentHeight));
+
+				if (waterFlow <= 0.f)
+				{
+					newHeight[i] = currentHeight + Kd * currentSediment;
+					newSediment[i] = (1.f - Kd) * currentSediment;
+				}
+				else
+				{
+					newWater[i] = currentWater - waterFlow;
+					newWater[adjacentIndex] = adjacentWater + waterFlow;
+					float c = Kc * waterFlow;
+					if (currentSediment >= c)
+					{
+						newSediment[adjacentIndex] = adjacentSediment + c;
+						newHeight[i] = currentHeight + Kd * (currentSediment - c);
+						newSediment[i] = (1.f - Kd) * (currentSediment - c);
+					}
+					else
+					{
+						newSediment[adjacentIndex] = adjacentSediment + currentSediment + Ks * (c - currentSediment);
+						newHeight[i] = currentHeight - Ks * (c - currentSediment);
+						newSediment[i] = 0.f;
+					}
+				}
+			}
+		}
+
+		//Swap buffers
+		float rainfall = e % rainfallInterval == 0 ? waterAmount : 0.f;
+		for (int32 i = 0; i < height.Num(); i++)
+		{
+
+			height[i] = newHeight[i];
+			water[i] = newWater[i] + rainfall;
+			sediment[i] = newSediment[i];
+		}
+	}
+
+	//Apply height
+	for (int32 i = 0; i < height.Num(); i++)
+	{
+		HeightData[i] = height[i];
+	}
+}
+
+void UGenHeight::ParticleBasedErosion()
+{
+	struct FErsonionParticle
+	{
+		FVector2D position = FVector2D::ZeroVector;
+		FVector2D velocity = FVector2D::ZeroVector;
+		float waterVolume = 10.f;
+		float sediment = 0.f;
+	};
+
+	float Ka = .6f; //Acceleration constant
+	float Kf = .3f; //Friction constant
+	float Kc = 10.f; //Sediment carrying constant
+	float Kd = .3f; //Deposition constant (0-1, inclusive)
+	float Ks = .5f; //Soil softness constant (0-1, inclusive)
+	float evaporationRate = 1.f;
+
+	int32 erosionIterations = 16384;
+
+	float totalWidth = xSections * xSize;
+	float totalHeight = ySections * ySize;
+
+	for (int32 e = 0; e < erosionIterations; e++)
+	{
+		FErsonionParticle currentParticle;
+		currentParticle.position = FVector2D(FMath::RandRange(1.f, totalWidth - 2.f), FMath::RandRange(1.f, totalHeight - 2.f));
+
+		while (currentParticle.waterVolume > 0.f)
+		{
+			FVector normal = GetNormalF(currentParticle.position.X, currentParticle.position.Y);
+			if (normal == FVector::ZeroVector) break;
+
+			currentParticle.velocity += Ka * FVector2D(normal.X, normal.Y);
+
+			currentParticle.velocity *= (1.f - Kf);
+
+			currentParticle.position += currentParticle.velocity;
+			if (currentParticle.position.X <= 0.f || currentParticle.position.X >= totalWidth - 1.f || currentParticle.position.Y <= 0.f || currentParticle.position.Y >= totalHeight - 1.f) break;
+
+			float maxSediment = Kc * currentParticle.velocity.Length() * currentParticle.waterVolume;
+			if (currentParticle.sediment > maxSediment)
+			{
+				float excessSediment = currentParticle.sediment - maxSediment;
+				excessSediment *= Kd;
+
+				ModifyHeightF(currentParticle.position.X, currentParticle.position.Y, excessSediment);
+				currentParticle.sediment -= excessSediment;
+			}
+			else
+			{
+				float missingSediment = maxSediment - currentParticle.sediment;
+				missingSediment *= Ks;
+
+				ModifyHeightF(currentParticle.position.X, currentParticle.position.Y, -missingSediment);
+				currentParticle.sediment += missingSediment;
+			}
+
+			currentParticle.waterVolume -= evaporationRate;
+		}
+	}
+
+	//EnsureSectionsConnect();
+}
+
+void UGenHeight::GlobalSmooth()
+{
+	TArray<float> newHeightData = HeightData;
+
+	int32 smoothSize = 1;
+	int32 width = xSections * xSize;
+
+	for (uint32 xSec = 0; xSec < xSections; xSec++)
+	{
+		for (uint32 ySec = 0; ySec < ySections; ySec++)
+		{
+			for (uint32 y = 0; y < ySize; y++)
+			{
+				for (uint32 x = 0; x < xSize; x++)
+				{
+					if (xSec == 0 && x == 0) continue;
+					if (xSec == xSections - 1 && x == xSize - 1) continue;
+
+					float heightSum = 0.f;
+					int32 neighbors = 0;
+
+					for (int32 dy = -smoothSize; dy <= smoothSize; dy++)
+					{
+						for (int32 dx = -smoothSize; dx <= smoothSize; dx++)
+						{
+
+							int32 newIndex = GetGlobalIndex(xSec, ySec, x, y) + dy * width + dx;
+							if (newIndex < 0 || newIndex >= HeightData.Num()) continue;
+
+							heightSum += HeightData[newIndex];
+							neighbors++;
+						}
+					}
+
+					if (neighbors == 0) continue;
+
+					newHeightData[GetGlobalIndex(xSec, ySec, x, y)] = heightSum / float(neighbors);
+				}
+			}
+		}
+	}
+
+	for (int32 i = 0; i < HeightData.Num(); i++)
+	{
+		HeightData[i] = newHeightData[i];
+	}
+}
+
+void UGenHeight::GetSectionHeight(uint32 sectionIndex, TArray<float>& height)
+{
+	uint32 xSection = sectionIndex % xSections;
+	uint32 ySection = sectionIndex / ySections;
+
+	bool hasXBorder = xSection < xSections - 1;
+	bool hasYBorder = ySection < ySections - 1;
+
+	for (uint32 y = 0; y < ySize; y++)
+	{
+		for (uint32 x = 0; x < xSize; x++)
+		{
+			height.Add(HeightData[GetGlobalIndex(xSection, ySection, x, y)]);
+		}
+
+		if (hasXBorder) height.Add(HeightData[GetGlobalIndex(xSection, ySection, xSize, y)]);
+	}
+
+	if (hasYBorder)
+	{
+		for (uint32 x = 0; x < xSize; x++)
+		{
+			height.Add(HeightData[GetGlobalIndex(xSection, ySection, x, ySize)]);
+		}
+
+		if (hasXBorder) height.Add(HeightData[GetGlobalIndex(xSection, ySection, xSize, ySize)]);
+	}
+}
 
 // Called when the game starts
 void UGenHeight::BeginPlay()
@@ -66,6 +308,7 @@ void UGenHeight::DrawTexture()
 	//Even though a R8 format would be the most efficiet, render as RGB so that it shows up ok in the UI
 	HeightmapTexture = UTexture2D::CreateTransient(xTexSize, yTexSize, EPixelFormat::PF_R8G8B8A8, "Heightmap texture");
 	HeightmapTexture->MipGenSettings = TextureMipGenSettings::TMGS_NoMipmaps;
+	HeightmapTexture->Filter = TextureFilter::TF_Nearest;
 	
 	FByteBulkData& textureData = HeightmapTexture->GetPlatformData()->Mips[0].BulkData;
 	auto pixels = reinterpret_cast<FColor*>(textureData.Lock(LOCK_READ_WRITE));
@@ -114,4 +357,113 @@ float UGenHeight::NormalizeHeightValue(float heightValue)
 	heightValue += .5f;
 
 	return heightValue;
+}
+
+uint32 UGenHeight::GetGlobalIndex(uint32 currentXSection, uint32 currentYSection, uint32 currentXPosition, uint32 currentYPosition)
+{
+	return currentYSection * xSections * xSize * ySize + currentYPosition * xSections * xSize + currentXSection * xSize + currentXPosition;
+}
+
+uint32 UGenHeight::GetGlobalIndex(uint32 globalXPosition, uint32 globalYPosition)
+{
+	uint32 width = xSections * xSize;
+	return globalYPosition * width + globalXPosition;
+}
+
+FVector UGenHeight::GetNormal(int32 globalIndex)
+{
+	int32 width = xSections * xSize;
+	float current = HeightData[globalIndex];
+
+	float left = globalIndex > 0 ? HeightData[globalIndex - 1] : current;
+	float right = globalIndex < HeightData.Num() - 1 ? HeightData[globalIndex + 1] : current;
+	float top = globalIndex - width >= 0 ? HeightData[globalIndex - width] : current;
+	float bottom = globalIndex + width < HeightData.Num() ? HeightData[globalIndex + width] : current;
+
+	return FVector(2.f * (right - left), 2.f * (bottom - top), -4.f).GetSafeNormal();
+}
+
+void UGenHeight::GetPositionRangeF(float xPos, float yPos, int32& outXMin, int32& outXMax, int32& outYMin, int32& outYMax)
+{
+	outXMin = FMath::FloorToInt32(xPos);
+	outXMax = FMath::CeilToInt32(xPos);
+	outYMin = FMath::FloorToInt32(yPos);
+	outYMax = FMath::CeilToInt32(yPos);
+
+	//Check out of bounds
+	outXMin = FMath::Clamp(outXMin, 0, xSections * xSize);
+	outXMax = FMath::Clamp(outXMax, outXMin, xSections * xSize);
+	outYMin = FMath::Clamp(outYMin, 0, ySections * ySize);
+	outYMax = FMath::Clamp(outYMax, outYMin, ySections * ySize);
+}
+
+FVector UGenHeight::GetNormalF(float xPos, float yPos)
+{
+	FVector normal = FVector::ZeroVector;
+
+	int32 xMin, xMax, yMin, yMax;
+	GetPositionRangeF(xPos, yPos, xMin, xMax, yMin, yMax);
+
+	for (int32 y = yMin; y <= yMax; y++)
+	{
+		float yDiff = 1.f - FMath::Abs(yPos - float(y));
+		for (int32 x = xMin; x <= xMax; x++)
+		{
+			float xDiff = 1.f - FMath::Abs(xPos - float(x));
+
+			normal += GetNormal(GetGlobalIndex(x, y)) * yDiff * xDiff;
+		}
+	}
+
+	return normal;
+}
+
+void UGenHeight::ModifyHeightF(float xPos, float yPos, float diff)
+{
+	int32 xMin, xMax, yMin, yMax;
+	GetPositionRangeF(xPos, yPos, xMin, xMax, yMin, yMax);
+
+	for (int32 y = yMin; y <= yMax; y++)
+	{
+		float yDiff = 1.f - FMath::Abs(yPos - float(y));
+		for (int32 x = xMin; x <= xMax; x++)
+		{
+			float xDiff = 1.f - FMath::Abs(xPos - float(x));
+
+			HeightData[GetGlobalIndex(x, y)] += yDiff * xDiff * diff;
+		}
+	}
+}
+
+void UGenHeight::EnsureSectionsConnect()
+{
+	for (uint32 ySec = 1; ySec < ySections; ySec++)
+	{
+		for (uint32 xSec = 1; xSec < xSections; xSec++)
+		{
+			//Top/bottom border
+			for (uint32 i = 0; i < xSize; i++)
+			{
+				float height1 = HeightData[GetGlobalIndex(xSec, ySec - 1, 0, ySize - 1) + i];
+				float height2 = HeightData[GetGlobalIndex(xSec, ySec, 0, 0) + i];
+
+				float avg = (height1 + height2) * 0.5f;
+
+				HeightData[GetGlobalIndex(xSec, ySec - 1, 0, ySize - 1) + i] = avg;
+				HeightData[GetGlobalIndex(xSec, ySec, 0, 0) + i] = avg;
+			}
+
+			//Left-right border
+			for (uint32 i = 0; i < ySize; i++)
+			{
+				float height1 = HeightData[GetGlobalIndex(xSec - 1, ySec, 0, i) + xSize - 1];
+				float height2 = HeightData[GetGlobalIndex(xSec, ySec, 0, i)];
+
+				float avg = (height1 + height2) * 0.5f;
+
+				HeightData[GetGlobalIndex(xSec - 1, ySec, 0, i) + xSize - 1] = avg;
+				HeightData[GetGlobalIndex(xSec, ySec, 0, i)] = avg;
+			}
+		}
+	}
 }

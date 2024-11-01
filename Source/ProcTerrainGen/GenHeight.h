@@ -50,6 +50,13 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void SetGenerationOptions(FHeightGeneratorOptions options) { GenOptions = options; }
 
+	void GridBasedErosion();
+	void ParticleBasedErosion();
+
+	void GlobalSmooth();
+	
+	void GetSectionHeight(uint32 sectionIndex, TArray<float>& height);
+
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
@@ -70,4 +77,18 @@ private:
 	float CalculateHeightValue(const FVector2D& position);
 
 	float NormalizeHeightValue(float heightValue);
+
+	uint32 GetGlobalIndex(uint32 currentXSection, uint32 currentYSection, uint32 currentXPosition, uint32 currentYPosition);
+	uint32 GetGlobalIndex(uint32 globalXPosition, uint32 globalYPosition);
+
+	FVector GetNormal(int32 globalIndex);
+
+	void GetPositionRangeF(float xPos, float yPos, int32& outXMin, int32& outXMax, int32& outYMin, int32& outYMax);
+
+	FVector GetNormalF(float xPos, float yPos);
+
+	//Helper function that modifies corresponding discrete height values
+	void ModifyHeightF(float xPos, float yPos, float diff);
+
+	void EnsureSectionsConnect();
 };

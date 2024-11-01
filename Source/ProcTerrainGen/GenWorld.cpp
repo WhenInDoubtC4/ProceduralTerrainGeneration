@@ -24,7 +24,7 @@ void AGenWorld::BeginPlay()
 	Super::BeginPlay();
 
 	TerrainSectionReady.AddUObject(this, &AGenWorld::OnNextSectionReady);
-	AllTerrainSectionsReady.AddUObject(this, &AGenWorld::OnAllTerrainSectionsReady);
+	AllTerrainSectionsReady.AddUObject(this, &AGenWorld::CalculateTerrainTBN);
 
 	GenerateTerrain();
 }
@@ -76,10 +76,15 @@ void AGenWorld::GenerateNextSection()
 
 	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [=, this]()
 	{
+		FPlatformProcess::Sleep(.1f);
+
 		sectionIndex = ySection * ySections + xSection;
 
 		TArray<float> heightData;
 		HeightGenerator->GenerateHeight(xSection, ySection, heightData);
+
+		bool hasXBorder = xSection < xSections - 1;
+		bool hasYBorder = ySection < ySections - 1;
 
 		//Create vertex and UV arrays
 		for (int32 y = 0; y < yVertexCount; y++)
@@ -89,15 +94,62 @@ void AGenWorld::GenerateNextSection()
 				float xValue = x * edgeSize;
 				float yValue = y * edgeSize;
 
-				xValue += xSection * (xVertexCount - 1) * edgeSize;
-				yValue += ySection * (yVertexCount - 1) * edgeSize;
+				xValue += xSection * (xVertexCount) * edgeSize;
+				yValue += ySection * (yVertexCount) * edgeSize;
 
 				float heightValue = heightData[y * xVertexCount + x];
+				//float heightValue = 0.f;
 
 				FVector newVertex(xValue, yValue, heightValue);
 				vertices.Add(newVertex);
 
 				FVector2D uvCoord((float)x, (float)y);
+				uvs.Add(uvCoord);
+			}
+
+			if (hasXBorder)
+			{
+				FVector borderVertex;
+				borderVertex.X = xVertexCount * edgeSize + xSection * (xVertexCount)*edgeSize;
+				borderVertex.Y = y * edgeSize + ySection * (yVertexCount)*edgeSize;
+				borderVertex.Z = heightData[y * xVertexCount + xVertexCount - 1];
+
+				vertices.Add(borderVertex);
+
+				FVector2D uvCoord(xVertexCount, (float)y);
+				uvs.Add(uvCoord);
+			}
+		}
+
+		if (hasYBorder)
+		{
+			for (int32 x = 0; x < xVertexCount; x++)
+			{
+				float xValue = x * edgeSize;
+				float yValue = yVertexCount * edgeSize;
+
+				xValue += xSection * (xVertexCount)*edgeSize;
+				yValue += ySection * (yVertexCount)*edgeSize;
+
+				float heightValue = heightData[(yVertexCount - 1) * xVertexCount + x];
+
+				FVector newVertex(xValue, yValue, heightValue);
+				vertices.Add(newVertex);
+
+				FVector2D uvCoord((float)x, (float)yVertexCount);
+				uvs.Add(uvCoord);
+			}
+
+			if (hasXBorder)
+			{
+				FVector borderVertex;
+				borderVertex.X = xVertexCount * edgeSize + xSection * (xVertexCount)*edgeSize;
+				borderVertex.Y = yVertexCount * edgeSize + ySection * (yVertexCount)*edgeSize;
+				borderVertex.Z = heightData[(yVertexCount - 1) * xVertexCount + xVertexCount - 1];
+
+				vertices.Add(borderVertex);
+
+				FVector2D uvCoord(xVertexCount, (float)yVertexCount);
 				uvs.Add(uvCoord);
 			}
 		}
@@ -109,12 +161,62 @@ void AGenWorld::GenerateNextSection()
 			{
 				int32 startIndex = y * xVertexCount + x;
 
+				if (hasXBorder) startIndex += y;
+
+				int32 offset = hasXBorder ? 1 : 0;
+
 				triangles.Add(startIndex); //(0,0)
-				triangles.Add(startIndex + xVertexCount); //(0, 1)
+				triangles.Add(startIndex + xVertexCount + offset); //(0, 1)
 				triangles.Add(startIndex + 1); //(1,0)
 
-				triangles.Add(startIndex + xVertexCount); //(0, 1)
-				triangles.Add(startIndex + xVertexCount + 1); // (1, 1)
+				triangles.Add(startIndex + xVertexCount + offset); //(0, 1)
+				triangles.Add(startIndex + xVertexCount + 1 + offset); // (1, 1)
+				triangles.Add(startIndex + 1); //(1, 0)
+			}
+
+			if (hasXBorder)
+			{
+				int32 startIndex = y * xVertexCount + (xVertexCount - 1) + y;
+
+				triangles.Add(startIndex); //(0,0)
+				triangles.Add(startIndex + xVertexCount + 1); //(0, 1)
+				triangles.Add(startIndex + 1); //(1,0)
+
+				triangles.Add(startIndex + xVertexCount + 1); //(0, 1)
+				triangles.Add(startIndex + xVertexCount + 2); // (1, 1)
+				triangles.Add(startIndex + 1); //(1, 0)
+			}
+		}
+
+		if (hasYBorder)
+		{
+			for (int32 x = 0; x < xVertexCount - 1; x++)
+			{
+				int32 startIndex = (yVertexCount - 1) * xVertexCount + x;
+
+				if (hasXBorder) startIndex += yVertexCount - 1;
+
+				int32 offset = hasXBorder ? 1 : 0;
+
+				triangles.Add(startIndex); //(0,0)
+				triangles.Add(startIndex + xVertexCount + offset); //(0, 1)
+				triangles.Add(startIndex + 1); //(1,0)
+
+				triangles.Add(startIndex + xVertexCount + offset); //(0, 1)
+				triangles.Add(startIndex + xVertexCount + 1 + offset); // (1, 1)
+				triangles.Add(startIndex + 1); //(1, 0)
+			}
+
+			if (hasXBorder)
+			{
+				int32 startIndex = (yVertexCount - 1) * xVertexCount + (xVertexCount - 1) + yVertexCount - 1;
+
+				triangles.Add(startIndex); //(0,0)
+				triangles.Add(startIndex + xVertexCount + 1); //(0, 1)
+				triangles.Add(startIndex + 1); //(1,0)
+
+				triangles.Add(startIndex + xVertexCount + 1); //(0, 1)
+				triangles.Add(startIndex + xVertexCount + 2); // (1, 1)
 				triangles.Add(startIndex + 1); //(1, 0)
 			}
 		}
@@ -128,13 +230,13 @@ void AGenWorld::GenerateNextSection()
 
 void AGenWorld::OnNextSectionReady()
 {
-	TerrainMesh->CreateMeshSection(sectionIndex, vertices, triangles, normals, uvs, TArray<FColor>(), tangents, true);
+	TerrainMesh->CreateMeshSection(sectionIndex, vertices, triangles, TArray<FVector>(), uvs, TArray<FColor>(), TArray<FProcMeshTangent>(), true);
 	if (terrainMaterial) TerrainMesh->SetMaterial(sectionIndex, terrainMaterial);
 
 	GenerateNextSection();
 }
 
-void AGenWorld::OnAllTerrainSectionsReady()
+void AGenWorld::CalculateTerrainTBN()
 {
 	for (uint32 i = 0; i < xSections * ySections; i++) TBNQueue.Enqueue(i);
 
@@ -143,15 +245,23 @@ void AGenWorld::OnAllTerrainSectionsReady()
 
 void AGenWorld::GenerateNextTBN()
 {
-	normals.Empty();
-	tangents.Empty();
+	/*normals.Empty();
+	tangents.Empty();*/
 
-	if (TBNQueue.IsEmpty()) return;
+	if (TBNQueue.IsEmpty())
+	{
+		RunGlobalFilters();
+
+		return;
+	}
 
 	uint32 nextSectionIndex;
 	TBNQueue.Dequeue(nextSectionIndex);
 
 	FProcMeshSection* currentSection = TerrainMesh->GetProcMeshSection(nextSectionIndex);
+
+	/*TArray<FVector> normals;
+	TArray<FProcMeshTangent> tangents;*/
 
 	TArray<FVector> extracedVertices;
 	TArray<FVector2D> extracedUVs;
@@ -171,12 +281,93 @@ void AGenWorld::GenerateNextTBN()
 
 	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [=, this]
 	{
+		FPlatformProcess::Sleep(.1f);
+
+		TArray<FVector> normals;
+		TArray<FProcMeshTangent> tangents;
+
 		UKismetProceduralMeshLibrary::CalculateTangentsForMesh(extracedVertices, extracedTriangles, extracedUVs, normals, tangents);
 
 		AsyncTask(ENamedThreads::GameThread, [=, this]
 		{
 			TerrainMesh->UpdateMeshSection(nextSectionIndex, extracedVertices, normals, extracedUVs, TArray<FColor>(), tangents);
 			GenerateNextTBN();
+		});
+	});
+}
+
+void AGenWorld::RunGlobalFilters()
+{
+	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [=, this]
+	{
+		//HeightGenerator->GridBasedErosion();
+		HeightGenerator->ParticleBasedErosion();
+		//HeightGenerator->GlobalSmooth();
+
+		AsyncTask(ENamedThreads::GameThread, [=, this]
+		{
+			HeightGenerator->DrawTexture();
+			
+			UpdateAllSectionsPost();
+		});
+	});
+}
+
+void AGenWorld::UpdateAllSectionsPost()
+{
+	for (uint32 i = 0; i < xSections * ySections; i++) PostSectionQueue.Enqueue(i);
+
+	UpdateNextSectionPost();
+}
+
+void AGenWorld::UpdateNextSectionPost()
+{
+	if (PostSectionQueue.IsEmpty()) return;
+
+	uint32 nextSectionIndex;
+	PostSectionQueue.Dequeue(nextSectionIndex);
+
+	FProcMeshSection* currentSection = TerrainMesh->GetProcMeshSection(nextSectionIndex);
+
+	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [=, this]
+	{
+		FPlatformProcess::Sleep(.1f);
+
+		//No normals and tangents here, since because the height changed, they will need to be recalculated
+		TArray<FVector> vertices;
+		TArray<FVector2D> uvs;
+		TArray<int32> indices;
+
+		TArray<float> height;
+
+		HeightGenerator->GetSectionHeight(nextSectionIndex, height);
+
+		uint32 i = 0;
+		for (const FProcMeshVertex& vertexData : currentSection->ProcVertexBuffer)
+		{
+			FVector newVertex = vertexData.Position;
+			newVertex.Z = height[i++];
+
+			vertices.Add(newVertex);
+			uvs.Add(vertexData.UV0);
+		}
+
+		for (const uint32& index : currentSection->ProcIndexBuffer)
+		{
+			indices.Add(index);
+		}
+
+		TArray<FVector> normals;
+		TArray<FProcMeshTangent> tangents;
+
+		//TODO: Seamless normal generation
+		UKismetProceduralMeshLibrary::CalculateTangentsForMesh(vertices, indices, uvs, normals, tangents);
+
+		AsyncTask(ENamedThreads::GameThread, [=, this]
+		{
+			TerrainMesh->UpdateMeshSection(nextSectionIndex, vertices, normals, uvs, TArray<FColor>(), tangents);
+
+			UpdateNextSectionPost();
 		});
 	});
 }
