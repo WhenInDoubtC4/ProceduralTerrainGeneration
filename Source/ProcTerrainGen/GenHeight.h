@@ -52,6 +52,7 @@ public:
 
 	void GridBasedErosion();
 	void ParticleBasedErosion();
+	void ThermalWeathering();
 
 	void GlobalSmooth();
 	

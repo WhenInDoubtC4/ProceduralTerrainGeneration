@@ -208,6 +208,51 @@ void UGenHeight::ParticleBasedErosion()
 	//EnsureSectionsConnect();
 }
 
+void UGenHeight::ThermalWeathering()
+{
+	float T = FMath::DegreesToRadians(15.f);
+	float c = .1f;
+	int32 iterations = 8;
+
+	TArray<float> newHeight;
+
+	for (int32 i = 0; i < HeightData.Num(); i++)
+	{
+		newHeight.Add(HeightData[i]);
+	}
+
+	int32 width = xSections * xSize;
+	TArray<int32> deltas;
+	deltas.Add(-1);
+	deltas.Add(1);
+	deltas.Add(-width);
+	deltas.Add(width);
+
+	for (int32 e = 0; e < iterations; e++)
+	{
+		for (int32 i = 0; i < HeightData.Num(); i++)
+		{
+			for (const int32& delta : deltas)
+			{
+				//TODO: no wraparound
+
+				int32 ai = i + delta; //Adjacent index
+				if (ai < 0 || ai >= HeightData.Num()) continue;
+
+				if (HeightData[i] - HeightData[ai] > T)
+				{
+					newHeight[ai] += c * (HeightData[i] - HeightData[ai] - T);
+				}
+			}
+		}
+
+		for (int32 i = 0; i < HeightData.Num(); i++)
+		{
+			HeightData[i] = newHeight[i];
+		}
+	}
+}
+
 void UGenHeight::GlobalSmooth()
 {
 	TArray<float> newHeightData = HeightData;
@@ -223,9 +268,6 @@ void UGenHeight::GlobalSmooth()
 			{
 				for (uint32 x = 0; x < xSize; x++)
 				{
-					//if (xSec == 0 && int32(x) + dx < 0) continue;
-					//if (xSec == xSections - 1 && x == xSize - 1) continue;
-
 					float heightSum = 0.f;
 					int32 neighbors = 0;
 

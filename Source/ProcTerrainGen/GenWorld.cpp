@@ -52,6 +52,64 @@ void AGenWorld::GenerateTerrain()
 	GenerateNextSection();
 }
 
+void AGenWorld::CalculateSectionTBN(const TArray<FVector>& secVertices, const TArray<int32>& secIndices, const TArray<FVector2D>& secUVs, TArray<FVector>& outNormals, TArray<FProcMeshTangent>& outTangents)
+{
+	TArray<FVector> intTangents;
+	TArray<FVector> intNormals;
+
+	for (int32 i = 0; i < secVertices.Num(); i++)
+	{
+		intNormals.Add(FVector::ZeroVector);
+		intTangents.Add(FVector::ZeroVector);
+	}
+
+	for (int32 i = 0; i < secIndices.Num(); i += 3)
+	{
+		FVector pos0 = secVertices[secIndices[i]];
+		FVector pos1 = secVertices[secIndices[i + 1]];
+		FVector pos2 = secVertices[secIndices[i + 2]];
+
+		FVector2D tex0 = secUVs[secIndices[i]];
+		FVector2D tex1 = secUVs[secIndices[i + 1]];
+		FVector2D tex2 = secUVs[secIndices[i + 2]];
+
+		FVector edge1 = pos1 - pos0;
+		FVector edge2 = pos2 - pos0;
+
+		FVector2D uv1 = tex1 - tex0;
+		FVector2D uv2 = tex2 - tex0;
+
+		float r = 1.0f / (uv1.X * uv2.Y - uv1.Y * uv2.X);
+
+		FVector normal = edge2 ^ edge1;
+
+		FVector tangent;
+		tangent.X = ((edge1.X * uv2.Y) - (edge2.X * uv1.Y)) * r;
+		tangent.Y = ((edge1.Y * uv2.Y) - (edge2.Y * uv1.Y)) * r;
+		tangent.Z = ((edge1.Z * uv2.Y) - (edge2.Z * uv1.Y)) * r;
+
+		intTangents[secIndices[i]] += tangent;
+		intTangents[secIndices[i + 1]] += tangent;
+		intTangents[secIndices[i + 2]] += tangent;
+
+		intNormals[secIndices[i]] += normal;
+		intNormals[secIndices[i + 1]] += normal;
+		intNormals[secIndices[i + 2]] += normal;
+	}
+
+	for (int32 i = 0; i < secVertices.Num(); i++)
+	{
+		FVector n = intNormals[i].GetSafeNormal();
+		outNormals.Add(n);
+
+		FVector t0 = intTangents[i];
+
+		FVector t = t0 - (n * FVector::DotProduct(n, t0));
+
+		outTangents.Add(FProcMeshTangent(t.GetSafeNormal(), false));
+	}
+}
+
 void AGenWorld::GenerateNextSection()
 {
 	vertices.Empty();
@@ -286,7 +344,10 @@ void AGenWorld::GenerateNextTBN()
 		TArray<FVector> normals;
 		TArray<FProcMeshTangent> tangents;
 
-		UKismetProceduralMeshLibrary::CalculateTangentsForMesh(extracedVertices, extracedTriangles, extracedUVs, normals, tangents);
+		//TERRIBLY slow
+		//UKismetProceduralMeshLibrary::CalculateTangentsForMesh(extracedVertices, extracedTriangles, extracedUVs, normals, tangents);
+
+		CalculateSectionTBN(extracedVertices, extracedTriangles, extracedUVs, normals, tangents);
 
 		AsyncTask(ENamedThreads::GameThread, [=, this]
 		{
@@ -300,9 +361,10 @@ void AGenWorld::RunGlobalFilters()
 {
 	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [=, this]
 	{
-		HeightGenerator->GridBasedErosion();
-		//HeightGenerator->ParticleBasedErosion();
-		HeightGenerator->GlobalSmooth();
+		//HeightGenerator->GridBasedErosion();
+		HeightGenerator->ParticleBasedErosion();
+		//HeightGenerator->Combo();
+		//HeightGenerator->GlobalSmooth();
 
 		AsyncTask(ENamedThreads::GameThread, [=, this]
 		{
@@ -342,11 +404,11 @@ void AGenWorld::UpdateNextSectionPost()
 
 		HeightGenerator->GetSectionHeight(nextSectionIndex, height);
 
-		uint32 i = 0;
+		uint32 j = 0;
 		for (const FProcMeshVertex& vertexData : currentSection->ProcVertexBuffer)
 		{
 			FVector newVertex = vertexData.Position;
-			newVertex.Z = height[i++];
+			newVertex.Z = height[j++];
 
 			vertices.Add(newVertex);
 			uvs.Add(vertexData.UV0);
@@ -360,8 +422,7 @@ void AGenWorld::UpdateNextSectionPost()
 		TArray<FVector> normals;
 		TArray<FProcMeshTangent> tangents;
 
-		//TODO: Seamless normal generation
-		UKismetProceduralMeshLibrary::CalculateTangentsForMesh(vertices, indices, uvs, normals, tangents);
+		CalculateSectionTBN(vertices, indices, uvs, normals, tangents);
 
 		AsyncTask(ENamedThreads::GameThread, [=, this]
 		{

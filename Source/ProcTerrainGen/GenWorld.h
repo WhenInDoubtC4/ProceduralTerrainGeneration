@@ -60,6 +60,8 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintGetter = GetHeightGenerator)
 	UGenHeight* HeightGenerator = nullptr;
 
+	void CalculateSectionTBN(const TArray<FVector>& vertices, const TArray<int32>& indices, const TArray<FVector2D>& uvs, TArray<FVector>& normals, TArray<FProcMeshTangent>& tangents);
+
 	TQueue<TPair<uint32, uint32>> SectionQueue;
 	void GenerateNextSection();
 	void OnNextSectionReady();
