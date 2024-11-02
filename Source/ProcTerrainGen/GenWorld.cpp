@@ -39,11 +39,11 @@ void AGenWorld::GenerateTerrain()
 {
 	TerrainMesh->ClearAllMeshSections();
 
-	HeightGenerator->Initialize(xSections, ySections, xVertexCount, yVertexCount);
+	HeightGenerator->Initialize(GenOptions.xSections, GenOptions.ySections, GenOptions.xVertexCount, GenOptions.yVertexCount);
 
-	for (uint32 y = 0; y < ySections; y++)
+	for (int32 y = 0; y < GenOptions.ySections; y++)
 	{
-		for (uint32 x = 0; x < xSections; x++)
+		for (int32 x = 0; x < GenOptions.xSections; x++)
 		{
 			SectionQueue.Enqueue({x, y});
 		}
@@ -129,33 +129,33 @@ void AGenWorld::GenerateNextSection()
 	TPair<uint32, uint32> section;
 	SectionQueue.Dequeue(section);
 
-	uint32 xSection = section.Key;
-	uint32 ySection = section.Value;
+	int32 xSection = section.Key;
+	int32 ySection = section.Value;
 
 	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [=, this]()
 	{
 		FPlatformProcess::Sleep(.1f);
 
-		sectionIndex = ySection * ySections + xSection;
+		sectionIndex = ySection * GenOptions.ySections + xSection;
 
 		TArray<float> heightData;
 		HeightGenerator->GenerateHeight(xSection, ySection, heightData);
 
-		bool hasXBorder = xSection < xSections - 1;
-		bool hasYBorder = ySection < ySections - 1;
+		bool hasXBorder = xSection < GenOptions.xSections - 1;
+		bool hasYBorder = ySection < GenOptions.ySections - 1;
 
 		//Create vertex and UV arrays
-		for (int32 y = 0; y < yVertexCount; y++)
+		for (int32 y = 0; y < GenOptions.yVertexCount; y++)
 		{
-			for (int32 x = 0; x < xVertexCount; x++)
+			for (int32 x = 0; x < GenOptions.xVertexCount; x++)
 			{
-				float xValue = x * edgeSize;
-				float yValue = y * edgeSize;
+				float xValue = x * GenOptions.edgeSize;
+				float yValue = y * GenOptions.edgeSize;
 
-				xValue += xSection * (xVertexCount) * edgeSize;
-				yValue += ySection * (yVertexCount) * edgeSize;
+				xValue += xSection * (GenOptions.xVertexCount) * GenOptions.edgeSize;
+				yValue += ySection * (GenOptions.yVertexCount) * GenOptions.edgeSize;
 
-				float heightValue = heightData[y * xVertexCount + x];
+				float heightValue = heightData[y * GenOptions.xVertexCount + x];
 				//float heightValue = 0.f;
 
 				FVector newVertex(xValue, yValue, heightValue);
@@ -168,113 +168,113 @@ void AGenWorld::GenerateNextSection()
 			if (hasXBorder)
 			{
 				FVector borderVertex;
-				borderVertex.X = xVertexCount * edgeSize + xSection * (xVertexCount)*edgeSize;
-				borderVertex.Y = y * edgeSize + ySection * (yVertexCount)*edgeSize;
-				borderVertex.Z = heightData[y * xVertexCount + xVertexCount - 1];
+				borderVertex.X = GenOptions.xVertexCount * GenOptions.edgeSize + xSection * (GenOptions.xVertexCount)*GenOptions.edgeSize;
+				borderVertex.Y = y * GenOptions.edgeSize + ySection * (GenOptions.yVertexCount)*GenOptions.edgeSize;
+				borderVertex.Z = heightData[y * GenOptions.xVertexCount + GenOptions.xVertexCount - 1];
 
 				vertices.Add(borderVertex);
 
-				FVector2D uvCoord(xVertexCount, (float)y);
+				FVector2D uvCoord(GenOptions.xVertexCount, (float)y);
 				uvs.Add(uvCoord);
 			}
 		}
 
 		if (hasYBorder)
 		{
-			for (int32 x = 0; x < xVertexCount; x++)
+			for (int32 x = 0; x < GenOptions.xVertexCount; x++)
 			{
-				float xValue = x * edgeSize;
-				float yValue = yVertexCount * edgeSize;
+				float xValue = x * GenOptions.edgeSize;
+				float yValue = GenOptions.yVertexCount * GenOptions.edgeSize;
 
-				xValue += xSection * (xVertexCount)*edgeSize;
-				yValue += ySection * (yVertexCount)*edgeSize;
+				xValue += xSection * (GenOptions.xVertexCount)*GenOptions.edgeSize;
+				yValue += ySection * (GenOptions.yVertexCount)*GenOptions.edgeSize;
 
-				float heightValue = heightData[(yVertexCount - 1) * xVertexCount + x];
+				float heightValue = heightData[(GenOptions.yVertexCount - 1) * GenOptions.xVertexCount + x];
 
 				FVector newVertex(xValue, yValue, heightValue);
 				vertices.Add(newVertex);
 
-				FVector2D uvCoord((float)x, (float)yVertexCount);
+				FVector2D uvCoord((float)x, (float)GenOptions.yVertexCount);
 				uvs.Add(uvCoord);
 			}
 
 			if (hasXBorder)
 			{
 				FVector borderVertex;
-				borderVertex.X = xVertexCount * edgeSize + xSection * (xVertexCount)*edgeSize;
-				borderVertex.Y = yVertexCount * edgeSize + ySection * (yVertexCount)*edgeSize;
-				borderVertex.Z = heightData[(yVertexCount - 1) * xVertexCount + xVertexCount - 1];
+				borderVertex.X = GenOptions.xVertexCount * GenOptions.edgeSize + xSection * (GenOptions.xVertexCount)*GenOptions.edgeSize;
+				borderVertex.Y = GenOptions.yVertexCount * GenOptions.edgeSize + ySection * (GenOptions.yVertexCount)*GenOptions.edgeSize;
+				borderVertex.Z = heightData[(GenOptions.yVertexCount - 1) * GenOptions.xVertexCount + GenOptions.xVertexCount - 1];
 
 				vertices.Add(borderVertex);
 
-				FVector2D uvCoord(xVertexCount, (float)yVertexCount);
+				FVector2D uvCoord(GenOptions.xVertexCount, (float)GenOptions.yVertexCount);
 				uvs.Add(uvCoord);
 			}
 		}
 
 		//Create triangles (ccw winding order)
-		for (int32 y = 0; y < yVertexCount - 1; y++)
+		for (int32 y = 0; y < GenOptions.yVertexCount - 1; y++)
 		{
-			for (int32 x = 0; x < xVertexCount - 1; x++)
+			for (int32 x = 0; x < GenOptions.xVertexCount - 1; x++)
 			{
-				int32 startIndex = y * xVertexCount + x;
+				int32 startIndex = y * GenOptions.xVertexCount + x;
 
 				if (hasXBorder) startIndex += y;
 
 				int32 offset = hasXBorder ? 1 : 0;
 
 				triangles.Add(startIndex); //(0,0)
-				triangles.Add(startIndex + xVertexCount + offset); //(0, 1)
+				triangles.Add(startIndex + GenOptions.xVertexCount + offset); //(0, 1)
 				triangles.Add(startIndex + 1); //(1,0)
 
-				triangles.Add(startIndex + xVertexCount + offset); //(0, 1)
-				triangles.Add(startIndex + xVertexCount + 1 + offset); // (1, 1)
+				triangles.Add(startIndex + GenOptions.xVertexCount + offset); //(0, 1)
+				triangles.Add(startIndex + GenOptions.xVertexCount + 1 + offset); // (1, 1)
 				triangles.Add(startIndex + 1); //(1, 0)
 			}
 
 			if (hasXBorder)
 			{
-				int32 startIndex = y * xVertexCount + (xVertexCount - 1) + y;
+				int32 startIndex = y * GenOptions.xVertexCount + (GenOptions.xVertexCount - 1) + y;
 
 				triangles.Add(startIndex); //(0,0)
-				triangles.Add(startIndex + xVertexCount + 1); //(0, 1)
+				triangles.Add(startIndex + GenOptions.xVertexCount + 1); //(0, 1)
 				triangles.Add(startIndex + 1); //(1,0)
 
-				triangles.Add(startIndex + xVertexCount + 1); //(0, 1)
-				triangles.Add(startIndex + xVertexCount + 2); // (1, 1)
+				triangles.Add(startIndex + GenOptions.xVertexCount + 1); //(0, 1)
+				triangles.Add(startIndex + GenOptions.xVertexCount + 2); // (1, 1)
 				triangles.Add(startIndex + 1); //(1, 0)
 			}
 		}
 
 		if (hasYBorder)
 		{
-			for (int32 x = 0; x < xVertexCount - 1; x++)
+			for (int32 x = 0; x < GenOptions.xVertexCount - 1; x++)
 			{
-				int32 startIndex = (yVertexCount - 1) * xVertexCount + x;
+				int32 startIndex = (GenOptions.yVertexCount - 1) * GenOptions.xVertexCount + x;
 
-				if (hasXBorder) startIndex += yVertexCount - 1;
+				if (hasXBorder) startIndex += GenOptions.yVertexCount - 1;
 
 				int32 offset = hasXBorder ? 1 : 0;
 
 				triangles.Add(startIndex); //(0,0)
-				triangles.Add(startIndex + xVertexCount + offset); //(0, 1)
+				triangles.Add(startIndex + GenOptions.xVertexCount + offset); //(0, 1)
 				triangles.Add(startIndex + 1); //(1,0)
 
-				triangles.Add(startIndex + xVertexCount + offset); //(0, 1)
-				triangles.Add(startIndex + xVertexCount + 1 + offset); // (1, 1)
+				triangles.Add(startIndex + GenOptions.xVertexCount + offset); //(0, 1)
+				triangles.Add(startIndex + GenOptions.xVertexCount + 1 + offset); // (1, 1)
 				triangles.Add(startIndex + 1); //(1, 0)
 			}
 
 			if (hasXBorder)
 			{
-				int32 startIndex = (yVertexCount - 1) * xVertexCount + (xVertexCount - 1) + yVertexCount - 1;
+				int32 startIndex = (GenOptions.yVertexCount - 1) * GenOptions.xVertexCount + (GenOptions.xVertexCount - 1) + GenOptions.yVertexCount - 1;
 
 				triangles.Add(startIndex); //(0,0)
-				triangles.Add(startIndex + xVertexCount + 1); //(0, 1)
+				triangles.Add(startIndex + GenOptions.xVertexCount + 1); //(0, 1)
 				triangles.Add(startIndex + 1); //(1,0)
 
-				triangles.Add(startIndex + xVertexCount + 1); //(0, 1)
-				triangles.Add(startIndex + xVertexCount + 2); // (1, 1)
+				triangles.Add(startIndex + GenOptions.xVertexCount + 1); //(0, 1)
+				triangles.Add(startIndex + GenOptions.xVertexCount + 2); // (1, 1)
 				triangles.Add(startIndex + 1); //(1, 0)
 			}
 		}
@@ -296,7 +296,7 @@ void AGenWorld::OnNextSectionReady()
 
 void AGenWorld::CalculateTerrainTBN()
 {
-	for (uint32 i = 0; i < xSections * ySections; i++) TBNQueue.Enqueue(i);
+	for (int32 i = 0; i < GenOptions.xSections * GenOptions.ySections; i++) TBNQueue.Enqueue(i);
 
 	GenerateNextTBN();
 }
@@ -361,8 +361,8 @@ void AGenWorld::RunGlobalFilters()
 {
 	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [=, this]
 	{
-		//HeightGenerator->GridBasedErosion();
-		HeightGenerator->ParticleBasedErosion();
+		HeightGenerator->Erode();
+		//HeightGenerator->ParticleBasedErosion();
 		//HeightGenerator->Combo();
 		//HeightGenerator->GlobalSmooth();
 
@@ -377,7 +377,7 @@ void AGenWorld::RunGlobalFilters()
 
 void AGenWorld::UpdateAllSectionsPost()
 {
-	for (uint32 i = 0; i < xSections * ySections; i++) PostSectionQueue.Enqueue(i);
+	for (int32 i = 0; i < GenOptions.xSections * GenOptions.ySections; i++) PostSectionQueue.Enqueue(i);
 
 	UpdateNextSectionPost();
 }

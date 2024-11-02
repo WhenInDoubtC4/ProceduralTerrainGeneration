@@ -51,16 +51,29 @@ TArray<float>& UGenHeight::GenerateHeight(uint32 xSection, uint32 ySection, TArr
 	return HeightData;
 }
 
+void UGenHeight::Erode()
+{
+	switch (GenOptions.erosionMethod)
+	{
+	case EErosionMethod::EROSION_METHOD_Particle:
+		ParticleBasedErosion();
+		break;
+	case EErosionMethod::EROSION_METHOD_Grid:
+		GridBasedErosion();
+		break;
+	}
+}
+
 //https://dl-acm-org.cobalt.champlain.edu/doi/10.1145/74334.74337
 void UGenHeight::GridBasedErosion()
 {
-	int32 erosionIterations = 32;
-	int32 rainfallInterval = 4;
-	float rainfall = 10.f;
+	int32 erosionIterations = GenOptions.gridErosion_iterations;
+	int32 rainfallInterval = GenOptions.gridErosion_rainfallInterval;
+	float rainfall = GenOptions.gridErosion_rainfall;
 
-	float Kd = .1f;
-	float Kc = 5.f;
-	float Ks = .3f;
+	float Kd = GenOptions.gridErosion_depositionConstant;
+	float Kc = GenOptions.gridErosion_sedimentCapacity;
+	float Ks = GenOptions.gridErosion_soilSoftness;
 
 	TArray<float> water;
 	TArray<float> sediment;
@@ -150,31 +163,37 @@ void UGenHeight::ParticleBasedErosion()
 	{
 		FVector2D position = FVector2D::ZeroVector;
 		FVector2D velocity = FVector2D::ZeroVector;
-		float waterVolume = 10.f;
+		float waterVolume = 0.f;
 		float sediment = 0.f;
 	};
 
-	float Ka = .6f; //Acceleration constant
-	float Kf = .3f; //Friction constant
-	float Kc = 10.f; //Sediment carrying constant
-	float Kd = .3f; //Deposition constant (0-1, inclusive)
-	float Ks = .5f; //Soil softness constant (0-1, inclusive)
-	float evaporationRate = 1.f;
+	float Ka = GenOptions.particleErosion_accelerationConsant; //Acceleration constant
+	float Kf = GenOptions.particleErosion_frictionConstant; //Friction constant
+	float Kc = GenOptions.particleErosion_sedimentCarryingCapacity; //Sediment carrying constant
+	float Kd = GenOptions.particleErosion_depositionConstant; //Deposition constant (0-1, inclusive)
+	float Ks = GenOptions.particleErosion_soilSoftnessConstant; //Soil softness constant (0-1, inclusive)
+	float evaporationRate = GenOptions.particleErosion_evaporationRate;
 
 	int32 erosionIterations = 16384;
 
 	float totalWidth = xSections * xSize;
 	float totalHeight = ySections * ySize;
 
+	float angleTolerance = FMath::Cos(FMath::DegreesToRadians(GenOptions.particleErosion_minAngle));
+
 	for (int32 e = 0; e < erosionIterations; e++)
 	{
 		FErsonionParticle currentParticle;
+		currentParticle.waterVolume = GenOptions.particleErosion_waterAmount;
 		currentParticle.position = FVector2D(FMath::RandRange(1.f, totalWidth - 2.f), FMath::RandRange(1.f, totalHeight - 2.f));
 
 		while (currentParticle.waterVolume > 0.f)
 		{
 			FVector normal = GetNormalF(currentParticle.position.X, currentParticle.position.Y);
 			if (normal == FVector::ZeroVector) break;
+
+			//Discard if normal is below an angle tolerance (to avoid weird sediment piles on (almost) flat sutfaces)
+			if (normal.Dot(FVector::UpVector) > angleTolerance) break;
 
 			currentParticle.velocity += Ka * FVector2D(normal.X, normal.Y);
 
@@ -416,7 +435,7 @@ FVector UGenHeight::GetNormal(int32 globalIndex)
 	float top = globalIndex - width >= 0 ? HeightData[globalIndex - width] : current;
 	float bottom = globalIndex + width < HeightData.Num() ? HeightData[globalIndex + width] : current;
 
-	return FVector(2.f * (right - left), 2.f * (bottom - top), -4.f).GetSafeNormal();
+	return -FVector(2.f * (right - left), 2.f * (bottom - top), -4.f).GetSafeNormal();
 }
 
 void UGenHeight::GetPositionRangeF(float xPos, float yPos, int32& outXMin, int32& outXMax, int32& outYMin, int32& outYMax)

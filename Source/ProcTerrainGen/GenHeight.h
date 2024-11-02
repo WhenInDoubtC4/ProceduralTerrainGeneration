@@ -7,10 +7,17 @@
 #include "Engine/Texture2D.h"
 #include "GenHeight.generated.h"
 
+UENUM(BlueprintType)
+enum EErosionMethod
+{
+	EROSION_METHOD_Grid,
+	EROSION_METHOD_Particle,
+};
+
 USTRUCT(BlueprintType)
 struct FHeightGeneratorOptions
 {
-	GENERATED_BODY()
+	GENERATED_USTRUCT_BODY()
 
 	UPROPERTY(BlueprintReadWrite)
 	float seed = 0.f;
@@ -21,9 +28,59 @@ struct FHeightGeneratorOptions
 	UPROPERTY(BlueprintReadWrite)
 	float step1Amplitude = 10000.f;
 
+	UPROPERTY(BlueprintReadWrite)
 	float step2Period = .1f;
 
+	UPROPERTY(BlueprintReadWrite)
 	float step2Amplitude = 300.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	TEnumAsByte<EErosionMethod> erosionMethod = EROSION_METHOD_Particle;
+
+	UPROPERTY(BlueprintReadWrite)
+	int32 particleErosion_iterations = 16384;
+
+	UPROPERTY(BlueprintReadWrite)
+	float particleErosion_minAngle = 5.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float particleErosion_waterAmount = 10.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float particleErosion_evaporationRate = 1.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float particleErosion_accelerationConsant = .6f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float particleErosion_frictionConstant = .3f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float particleErosion_sedimentCarryingCapacity = 10.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float particleErosion_depositionConstant = .3f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float particleErosion_soilSoftnessConstant = .5f;
+
+	UPROPERTY(BlueprintReadWrite)
+	int32 gridErosion_iterations = 32;
+
+	UPROPERTY(BlueprintReadWrite)
+	int32 gridErosion_rainfallInterval = 4;
+
+	UPROPERTY(BlueprintReadWrite)
+	float gridErosion_rainfall = 10.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float gridErosion_depositionConstant = .1f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float gridErosion_sedimentCapacity = 5.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float gridErosion_soilSoftness = .3f;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FHeightmapTextureUpdated, UTexture2D*, heightmapTexture);
@@ -50,6 +107,7 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void SetGenerationOptions(FHeightGeneratorOptions options) { GenOptions = options; }
 
+	void Erode();
 	void GridBasedErosion();
 	void ParticleBasedErosion();
 	void ThermalWeathering();

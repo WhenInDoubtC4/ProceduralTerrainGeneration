@@ -9,6 +9,27 @@
 #include "GenHeight.h"
 #include "GenWorld.generated.h"
 
+USTRUCT(BlueprintType)
+struct FWorldGenerationOptions
+{
+	GENERATED_USTRUCT_BODY()
+
+	UPROPERTY(BlueprintReadWrite)
+	int32 xVertexCount = 64;
+
+	UPROPERTY(BlueprintReadWrite)
+	int32 yVertexCount = 64;
+
+	UPROPERTY(BlueprintReadWrite)
+	int32 xSections = 4;
+
+	UPROPERTY(BlueprintReadWrite)
+	int32 ySections = 4;
+
+	UPROPERTY(BlueprintReadWrite)
+	float edgeSize = 100.f;
+};
+
 DECLARE_MULTICAST_DELEGATE(FTerrainSectionReady);
 DECLARE_MULTICAST_DELEGATE(FAllTerrainSectionsReady);
 
@@ -35,21 +56,27 @@ public:
 	UFUNCTION(BlueprintCallable)
 	UGenHeight* GetHeightGenerator() const { return HeightGenerator; };
 
+	UFUNCTION(BlueprintCallable)
+	void SetGenerationOptions(FWorldGenerationOptions options) { GenOptions = options; };
+
 private:
-	UPROPERTY(EditAnywhere)
-	int32 xVertexCount = 5;
+	//UPROPERTY(EditAnywhere)
+	//int32 GenOptions.xVertexCount = 5;
 
-	UPROPERTY(EditAnywhere)
-	int32 yVertexCount = 2;
+	//UPROPERTY(EditAnywhere)
+	//int32 GenOptions.yVertexCount = 2;
 
-	UPROPERTY(EditAnywhere)
-	uint32 xSections = 1;
+	//UPROPERTY(EditAnywhere)
+	//uint32 GenOptions.xSections = 1;
 
-	UPROPERTY(EditAnywhere)
-	uint32 ySections = 1;
+	//UPROPERTY(EditAnywhere)
+	//uint32 GenOptions.ySections = 1;
 
-	UPROPERTY(EditAnywhere)
-	float edgeSize = 100.f;
+	//UPROPERTY(EditAnywhere)
+	//float GenOptions.edgeSize = 100.f;
+
+	UPROPERTY(BlueprintSetter = SetGenerationOptions)
+	FWorldGenerationOptions GenOptions;
 
 	UPROPERTY(EditAnywhere)
 	UMaterialInterface* terrainMaterial = nullptr;
