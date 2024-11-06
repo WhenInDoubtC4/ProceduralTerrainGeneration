@@ -23,6 +23,18 @@ struct FHeightGeneratorOptions
 	float seed = 0.f;
 
 	UPROPERTY(BlueprintReadWrite)
+	bool islandModifier = true;
+
+	UPROPERTY(BlueprintReadWrite)
+	float islandGradientContrast = 3.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float islandGradientOffset = -.1f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float islandWaterLevelOffset = 2000.f;
+
+	UPROPERTY(BlueprintReadWrite)
 	float step1Period = .01f;
 
 	UPROPERTY(BlueprintReadWrite)

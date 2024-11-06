@@ -398,6 +398,8 @@ void UGenHeight::DrawTexture()
 
 float UGenHeight::CalculateHeightValue(const FVector2D& position)
 {
+	float result = 0.f;
+
 	//Step1
 	FVector2D step1Position = position;
 
@@ -406,6 +408,7 @@ float UGenHeight::CalculateHeightValue(const FVector2D& position)
 	step1Position += FMath::Fmod(GenOptions.seed, 5000.f) * FVector2D::UnitVector;
 
 	float step1Value = FMath::PerlinNoise2D(step1Position) * GenOptions.step1Amplitude;
+	result += step1Value;
 
 	//Step2
 	FVector2D step2Position = position;
@@ -414,8 +417,32 @@ float UGenHeight::CalculateHeightValue(const FVector2D& position)
 	step2Position += .1f * FVector2D::UnitVector;
 
 	float step2Value = FMath::PerlinNoise2D(step2Position) * GenOptions.step2Amplitude;
+	result += step2Value;
 
-	return step1Value + step2Value;
+	//Island modifier
+	if (!GenOptions.islandModifier) return result;
+
+	float midx = xSections * xSize * 0.5f;
+	float midy = ySections * ySize * 0.5f;
+
+	//Square gradient using chebyshev distance
+	float distance = FMath::Max(FMath::Abs(position.X - midx), FMath::Abs(position.Y - midy));
+	float distanceRatio = 1.f - (distance / FMath::Max(midx, midy));
+
+	distanceRatio += GenOptions.islandGradientOffset;
+	distanceRatio *= GenOptions.islandGradientContrast;
+
+	distanceRatio = FMath::Clamp(distanceRatio, 0.f, 1.f);
+
+	//Above water level
+	result += GenOptions.islandWaterLevelOffset;
+
+	//Only affect positive (above water level) values
+	if (result > -200.f) result *= distanceRatio;
+
+	result -= 1000.f; //So that edges don't stick out above the water
+
+	return result;
 }
 
 float UGenHeight::NormalizeHeightValue(float heightValue)
