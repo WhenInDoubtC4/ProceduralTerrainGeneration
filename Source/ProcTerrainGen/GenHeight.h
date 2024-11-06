@@ -94,7 +94,7 @@ public:
 	// Sets default values for this component's properties
 	UGenHeight();
 
-	void Initialize(uint32 xSectionCount, uint32 ySectionCount, uint32 sectionWidth, uint32 sectionHeight);
+	void Initialize(uint32 xSectionCount, uint32 ySectionCount, uint32 sectionWidth, uint32 sectionHeight, float edgeSize);
 	TArray<float>& GenerateHeight(uint32 xSection, uint32 ySection, TArray<float>& outLocalHeightData);
 	void DrawTexture();
 
@@ -116,6 +116,8 @@ public:
 	
 	void GetSectionHeight(uint32 sectionIndex, TArray<float>& height);
 
+	bool HeightfieldCast(float xPos, float yPos, float& outHeight, FVector& outNormal);
+
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
@@ -125,6 +127,7 @@ private:
 	uint32 ySections;
 	uint32 xSize;
 	uint32 ySize;
+	float vertexSize;
 	TArray<float> HeightData;
 
 	UPROPERTY(VisibleAnywhere, BlueprintGetter = GetHeightmapTexture)
@@ -144,6 +147,7 @@ private:
 
 	void GetPositionRangeF(float xPos, float yPos, int32& outXMin, int32& outXMax, int32& outYMin, int32& outYMax);
 
+	float GetHeightF(float xPos, float yPos);
 	FVector GetNormalF(float xPos, float yPos);
 
 	//Helper function that modifies corresponding discrete height values

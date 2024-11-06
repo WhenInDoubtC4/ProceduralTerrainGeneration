@@ -7,6 +7,7 @@
 #include "ProceduralMeshComponent.h"
 #include "KismetProceduralMeshLibrary.h"
 #include "GenHeight.h"
+#include "GenFoliage.h"
 #include "GenWorld.generated.h"
 
 USTRUCT(BlueprintType)
@@ -86,6 +87,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintGetter = GetHeightGenerator)
 	UGenHeight* HeightGenerator = nullptr;
+
+	UPROPERTY(VisibleAnywhere)
+	UGenFoliage* FoliageGenerator = nullptr;
 
 	void CalculateSectionTBN(const TArray<FVector>& vertices, const TArray<int32>& indices, const TArray<FVector2D>& uvs, TArray<FVector>& normals, TArray<FProcMeshTangent>& tangents);
 

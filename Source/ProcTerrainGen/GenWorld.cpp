@@ -16,6 +16,7 @@ AGenWorld::AGenWorld()
 	TerrainMesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
 
 	HeightGenerator = CreateDefaultSubobject<UGenHeight>("Height Generator");
+	FoliageGenerator = CreateDefaultSubobject<UGenFoliage>("Foliage generator");
 }
 
 // Called when the game starts or when spawned
@@ -39,7 +40,7 @@ void AGenWorld::GenerateTerrain()
 {
 	TerrainMesh->ClearAllMeshSections();
 
-	HeightGenerator->Initialize(GenOptions.xSections, GenOptions.ySections, GenOptions.xVertexCount, GenOptions.yVertexCount);
+	HeightGenerator->Initialize(GenOptions.xSections, GenOptions.ySections, GenOptions.xVertexCount, GenOptions.yVertexCount, GenOptions.edgeSize);
 
 	for (int32 y = 0; y < GenOptions.ySections; y++)
 	{
@@ -308,6 +309,9 @@ void AGenWorld::GenerateNextTBN()
 
 	if (TBNQueue.IsEmpty())
 	{
+		float halfsize = GenOptions.edgeSize * 0.5f;
+		FoliageGenerator->UpdateBounds(FVector(GenOptions.xSections * GenOptions.xVertexCount * GenOptions.edgeSize * .5f, GenOptions.ySections * GenOptions.yVertexCount * GenOptions.edgeSize * .5f, 0.f), FVector(GenOptions.xSections * GenOptions.xVertexCount, GenOptions.ySections * GenOptions.yVertexCount, 5000.f));
+		FoliageGenerator->Spawn(HeightGenerator);
 		RunGlobalFilters();
 
 		return;

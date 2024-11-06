@@ -13,12 +13,13 @@ UGenHeight::UGenHeight()
 	bTickInEditor = true;
 }
 
-void UGenHeight::Initialize(uint32 xSectionCount, uint32 ySectionCount, uint32 sectionWidth, uint32 sectionHeight)
+void UGenHeight::Initialize(uint32 xSectionCount, uint32 ySectionCount, uint32 sectionWidth, uint32 sectionHeight, float edgeSize)
 {
 	xSections = xSectionCount;
 	ySections = ySectionCount;
 	xSize = sectionWidth;
 	ySize = sectionHeight;
+	vertexSize = edgeSize;
 
 	uint32 arraySize = ySectionCount * sectionHeight * xSectionCount * sectionWidth;
 	
@@ -349,6 +350,19 @@ void UGenHeight::GetSectionHeight(uint32 sectionIndex, TArray<float>& height)
 	}
 }
 
+bool UGenHeight::HeightfieldCast(float xPos, float yPos, float& outHeight, FVector& outNormal)
+{
+	float localx = xPos / vertexSize;
+	float localy = yPos / vertexSize;
+
+	if (localx < 0.f || localy < 0.f || localx + 1.f >= float(xSections * xSize) || localy + 1.f >= float(ySections * ySize)) return false;
+
+	outHeight = GetHeightF(localx, localy);
+	outNormal = GetNormalF(localx, localy);
+
+	return true;
+}
+
 // Called when the game starts
 void UGenHeight::BeginPlay()
 {
@@ -452,6 +466,27 @@ void UGenHeight::GetPositionRangeF(float xPos, float yPos, int32& outXMin, int32
 	outYMax = FMath::Clamp(outYMax, outYMin, ySections * ySize);
 }
 
+float UGenHeight::GetHeightF(float xPos, float yPos)
+{
+	float result = 0.f;
+
+	int32 xMin, xMax, yMin, yMax;
+	GetPositionRangeF(xPos, yPos, xMin, xMax, yMin, yMax);
+
+	for (int32 y = yMin; y <= yMax; y++)
+	{
+		float yDiff = 1.f - FMath::Abs(yPos - float(y));
+		for (int32 x = xMin; x <= xMax; x++)
+		{
+			float xDiff = 1.f - FMath::Abs(xPos - float(x));
+
+			result += HeightData[GetGlobalIndex(x, y)] * yDiff * xDiff;
+		}
+	}
+
+	return result;
+}
+
 FVector UGenHeight::GetNormalF(float xPos, float yPos)
 {
 	FVector normal = FVector::ZeroVector;
@@ -470,7 +505,7 @@ FVector UGenHeight::GetNormalF(float xPos, float yPos)
 		}
 	}
 
-	return normal;
+	return normal.GetSafeNormal();
 }
 
 void UGenHeight::ModifyHeightF(float xPos, float yPos, float diff)
