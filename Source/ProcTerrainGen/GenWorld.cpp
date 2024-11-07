@@ -53,6 +53,30 @@ void AGenWorld::GenerateTerrain()
 	GenerateNextSection();
 }
 
+void AGenWorld::UpdateMaterial(FTerrainMaterialOptions options)
+{
+	auto newMaterial = UMaterialInstanceDynamic::Create(terrainMaterial, this);
+
+	newMaterial->SetScalarParameterValue("Ice", options.iceEnable ? 1.f : 0.f);
+	newMaterial->SetScalarParameterValue("Ice blend contrast", options.iceBlendContrast);
+	newMaterial->SetScalarParameterValue("Ice height", options.iceHeight);
+	newMaterial->SetScalarParameterValue("Ice noise blend contrast", options.iceNoiseBlendContrast);
+	newMaterial->SetScalarParameterValue("Ice noise scale", options.iceNoiseScale);
+
+	newMaterial->SetScalarParameterValue("Rock blend power", options.rockBlendPower);
+	newMaterial->SetScalarParameterValue("Rock slope angle", options.rockSlopeAngle);
+
+	newMaterial->SetScalarParameterValue("Beach blend contrast", options.beachBlendContrast);
+	newMaterial->SetScalarParameterValue("Beach blend noise contrast", options.beachBlendNoiseContrast);
+	newMaterial->SetScalarParameterValue("Beach blend noise scale", options.beachBlendNoiseScale);
+	newMaterial->SetScalarParameterValue("Water level", options.beachWaterLevel);
+
+	for (int32 i = 0; i < GenOptions.xSections * GenOptions.ySections; i++)
+	{
+		TerrainMesh->SetMaterial(i, newMaterial);
+	}
+}
+
 void AGenWorld::CalculateSectionTBN(const TArray<FVector>& secVertices, const TArray<int32>& secIndices, const TArray<FVector2D>& secUVs, TArray<FVector>& outNormals, TArray<FProcMeshTangent>& outTangents)
 {
 	TArray<FVector> intTangents;

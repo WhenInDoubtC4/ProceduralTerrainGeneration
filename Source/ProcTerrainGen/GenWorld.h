@@ -31,6 +31,45 @@ struct FWorldGenerationOptions
 	float edgeSize = 100.f;
 };
 
+USTRUCT(BlueprintType)
+struct FTerrainMaterialOptions
+{
+	GENERATED_USTRUCT_BODY()
+
+	UPROPERTY(BlueprintReadWrite)
+	bool iceEnable = false;
+
+	UPROPERTY(BlueprintReadWrite)
+	float iceBlendContrast = 300.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float iceHeight = -3000.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float iceNoiseBlendContrast = 500.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float iceNoiseScale = 10000.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float rockBlendPower = 16.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float rockSlopeAngle = .3f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float beachBlendContrast = 200.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float beachBlendNoiseContrast = 200.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float beachBlendNoiseScale = 10000.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float beachWaterLevel = -500.f;
+};
+
 DECLARE_MULTICAST_DELEGATE(FTerrainSectionReady);
 DECLARE_MULTICAST_DELEGATE(FAllTerrainSectionsReady);
 
@@ -59,6 +98,9 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void SetGenerationOptions(FWorldGenerationOptions options) { GenOptions = options; };
+
+	UFUNCTION(BlueprintCallable)
+	void UpdateMaterial(FTerrainMaterialOptions options);
 
 private:
 	//UPROPERTY(EditAnywhere)
