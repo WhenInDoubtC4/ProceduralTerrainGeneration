@@ -13,11 +13,16 @@ UGenFoliage::UGenFoliage()
 void UGenFoliage::UpdateBounds(const FVector& position, const FVector& extent)
 {
 	ProceduralFoliageVolume->SetActorLocation(position);
-	ProceduralFoliageVolume->SetActorScale3D(extent);
+	//ProceduralFoliageVolume->SetActorScale3D(extent);
+
+	auto foliageVolumeAABB = FBox::BuildAABB(position, FVector(10000.f, 10000.f, 5000.f));
+	ProceduralFoliageVolume->GetBrushComponent()->Bounds = foliageVolumeAABB;
 }
 
-void UGenFoliage::Spawn(UGenHeight* heightGenerator)
+void UGenFoliage::Spawn(UGenHeight* heightGenerator, FFoliageGenerationOptions options)
 {
+	float slopeAngleValue = FMath::Cos(FMath::DegreesToRadians(options.maxSlopeAngleDeg));
+
 	TArray<FDesiredFoliageInstance> desiredInstances;
 
 	ProceduralFoliageVolume->ProceduralComponent->GenerateProceduralContent(desiredInstances);
@@ -28,32 +33,31 @@ void UGenFoliage::Spawn(UGenHeight* heightGenerator)
 	{
 		TArray<FFoliageInstance>& instancesForType = instanceMap.FindOrAdd(desiredInstance.FoliageType);
 
-		FVector location = desiredInstance.StartTrace;
+		//Cannot use AInstancedFoliageActor::FoliageTrace as it will not collide with the procedural mesh
+		FHitResult result;
+		if (!GetWorld()->LineTraceSingleByChannel(result, desiredInstance.StartTrace, desiredInstance.EndTrace, ECollisionChannel::ECC_WorldDynamic)) continue;
 
-		FVector normal;
-		float height;
-		if (!heightGenerator->HeightfieldCast(location.X, location.Y, height, normal)) continue;
+		float height = result.Location.Z;
+		if (height > options.alpineZone || height < options.beachHeight) continue;
 
-		//TODO: Filter based on rock slope angle
-		if (normal.Dot(FVector::UpVector) < .01f) continue;
+		if (result.Normal.GetAbs().Dot(FVector::UpVector) < slopeAngleValue) continue;
 
 		FFoliageInstance newInstance;
-		location.Z = height;
-		newInstance.Location = location;
+		newInstance.Location = result.Location;
 		newInstance.Rotation = desiredInstance.Rotation.Rotator();
 		newInstance.ProceduralGuid = desiredInstance.ProceduralGuid;
-		newInstance.AlignToNormal(normal, FMath::DegreesToRadians(30.f));
+		newInstance.AlignToNormal(result.Normal, FMath::DegreesToRadians(30.f));
 
 		instancesForType.Add(newInstance);
 	}
 
-	auto instancedFoliageActor = AInstancedFoliageActor::Get(GetWorld(), true, GetWorld()->GetCurrentLevel(), FVector::ZeroVector);
+	InstancedFoliageActor = AInstancedFoliageActor::Get(GetWorld(), true, GetWorld()->GetCurrentLevel(), FVector::ZeroVector);
 
 	for (const auto& instance : instanceMap)
 	{
 		FFoliageInfo* info;
 
-		instancedFoliageActor->AddFoliageType(instance.Key, &info);
+		InstancedFoliageActor->AddFoliageType(instance.Key, &info);
 		
 		TArray<const FFoliageInstance*> instances;
 		for (const FFoliageInstance& idk : instance.Value) instances.Add(&idk);
@@ -61,6 +65,13 @@ void UGenFoliage::Spawn(UGenHeight* heightGenerator)
 		info->AddInstances(instance.Key, instances);
 		info->Refresh(true, false);
 	}
+}
+
+void UGenFoliage::Clear()
+{
+	if (!InstancedFoliageActor) return;
+
+	InstancedFoliageActor->DeleteInstancesForAllProceduralFoliageComponents(true);
 }
 
 void UGenFoliage::BeginPlay()
@@ -77,9 +88,3 @@ void UGenFoliage::BeginPlay()
 		ProceduralFoliageVolume->ProceduralComponent->FoliageSpawner = FoliageSpawner;
 	}
 }
-
-void UGenFoliage::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-}
-

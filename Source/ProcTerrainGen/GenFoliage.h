@@ -8,9 +8,24 @@
 #include "ProceduralFoliageComponent.h"
 #include "ProceduralFoliageSpawner.h"
 #include "InstancedFoliageActor.h"
+#include "Components/BrushComponent.h"
 #include "GenHeight.h"
 #include "GenFoliage.generated.h"
 
+USTRUCT(BlueprintType)
+struct FFoliageGenerationOptions
+{
+	GENERATED_USTRUCT_BODY()
+
+	UPROPERTY(BlueprintReadWrite)
+	float maxSlopeAngleDeg = 40.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float beachHeight = 200.f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float alpineZone = 8000.f;
+};
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class PROCTERRAINGEN_API UGenFoliage : public UActorComponent
@@ -22,15 +37,12 @@ public:
 	UGenFoliage();
 
 	void UpdateBounds(const FVector& position, const FVector& extent);
-	void Spawn(UGenHeight* heightGenerator);
+	void Spawn(UGenHeight* heightGenerator, FFoliageGenerationOptions options);
+	void Clear();
 
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
-
-public:	
-	// Called every frame
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
 	UPROPERTY(VisibleAnywhere)
@@ -38,4 +50,6 @@ private:
 
 	UPROPERTY(EditAnywhere)
 	UProceduralFoliageSpawner* FoliageSpawner = nullptr;
+
+	AInstancedFoliageActor* InstancedFoliageActor = nullptr;
 };

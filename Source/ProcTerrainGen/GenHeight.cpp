@@ -476,7 +476,10 @@ FVector UGenHeight::GetNormal(int32 globalIndex)
 	float top = globalIndex - width >= 0 ? HeightData[globalIndex - width] : current;
 	float bottom = globalIndex + width < HeightData.Num() ? HeightData[globalIndex + width] : current;
 
-	return -FVector(2.f * (right - left), 2.f * (bottom - top), -4.f).GetSafeNormal();
+	float latDiff = right - left;
+	float longDiff = bottom - top;
+
+	return FVector(latDiff, longDiff, 4.f * (latDiff + longDiff)).GetSafeNormal();
 }
 
 void UGenHeight::GetPositionRangeF(float xPos, float yPos, int32& outXMin, int32& outXMax, int32& outYMin, int32& outYMax)

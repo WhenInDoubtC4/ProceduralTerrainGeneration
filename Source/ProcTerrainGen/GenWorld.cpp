@@ -77,6 +77,15 @@ void AGenWorld::UpdateMaterial(FTerrainMaterialOptions options)
 	}
 }
 
+void AGenWorld::UpdateFoliage()
+{
+	FoliageGenerator->Clear();
+
+	if (!GenFoliage) return;
+
+	FoliageGenerator->Spawn(HeightGenerator, FoliageGenOptions);
+}
+
 void AGenWorld::CalculateSectionTBN(const TArray<FVector>& secVertices, const TArray<int32>& secIndices, const TArray<FVector2D>& secUVs, TArray<FVector>& outNormals, TArray<FProcMeshTangent>& outTangents)
 {
 	TArray<FVector> intTangents;
@@ -334,8 +343,8 @@ void AGenWorld::GenerateNextTBN()
 	if (TBNQueue.IsEmpty())
 	{
 		float halfsize = GenOptions.edgeSize * 0.5f;
-		FoliageGenerator->UpdateBounds(FVector(GenOptions.xSections * GenOptions.xVertexCount * GenOptions.edgeSize * .5f, GenOptions.ySections * GenOptions.yVertexCount * GenOptions.edgeSize * .5f, 0.f), FVector(GenOptions.xSections * GenOptions.xVertexCount, GenOptions.ySections * GenOptions.yVertexCount, 5000.f));
-		FoliageGenerator->Spawn(HeightGenerator);
+		FVector half(GenOptions.xSections * GenOptions.xVertexCount * GenOptions.edgeSize * .5f, GenOptions.ySections * GenOptions.yVertexCount * GenOptions.edgeSize * .5f, 0.f);
+		FoliageGenerator->UpdateBounds(half , half);
 		RunGlobalFilters();
 
 		return;
@@ -412,7 +421,11 @@ void AGenWorld::UpdateAllSectionsPost()
 
 void AGenWorld::UpdateNextSectionPost()
 {
-	if (PostSectionQueue.IsEmpty()) return;
+	if (PostSectionQueue.IsEmpty())
+	{
+		UpdateFoliage();
+		return;
+	}
 
 	uint32 nextSectionIndex;
 	PostSectionQueue.Dequeue(nextSectionIndex);

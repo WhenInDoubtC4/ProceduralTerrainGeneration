@@ -100,7 +100,16 @@ public:
 	void SetGenerationOptions(FWorldGenerationOptions options) { GenOptions = options; };
 
 	UFUNCTION(BlueprintCallable)
+	void SetFoliageGenerationOptions(FFoliageGenerationOptions options) { FoliageGenOptions = options; };
+
+	UFUNCTION(BlueprintCallable)
+	void SetGenerateFoliage(bool generate) { GenFoliage = generate; };
+
+	UFUNCTION(BlueprintCallable)
 	void UpdateMaterial(FTerrainMaterialOptions options);
+	
+	UFUNCTION(BlueprintCallable)
+	void UpdateFoliage();
 
 private:
 	//UPROPERTY(EditAnywhere)
@@ -120,6 +129,12 @@ private:
 
 	UPROPERTY(BlueprintSetter = SetGenerationOptions)
 	FWorldGenerationOptions GenOptions;
+
+	UPROPERTY(BlueprintSetter = SetGenerateFoliage)
+	bool GenFoliage = true;
+
+	UPROPERTY(BlueprintSetter = SetFoliageGenerationOptions)
+	FFoliageGenerationOptions FoliageGenOptions;
 
 	UPROPERTY(EditAnywhere)
 	UMaterialInterface* terrainMaterial = nullptr;
