@@ -156,6 +156,7 @@ private:
 	void CalculateTerrainTBN();
 	TQueue<uint32> TBNQueue;
 	void GenerateNextTBN();
+	void OnTBNCalculationDone();
 
 	FTerrainSectionReady TerrainSectionReady;
 	uint32 sectionIndex;
@@ -171,4 +172,5 @@ private:
 	void UpdateAllSectionsPost();
 	TQueue<uint32> PostSectionQueue;
 	void UpdateNextSectionPost();
+	void OnAllSectionsUpdated();
 };

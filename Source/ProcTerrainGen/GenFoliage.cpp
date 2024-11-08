@@ -15,7 +15,7 @@ void UGenFoliage::UpdateBounds(const FVector& position, const FVector& extent)
 	ProceduralFoliageVolume->SetActorLocation(position);
 	//ProceduralFoliageVolume->SetActorScale3D(extent);
 
-	auto foliageVolumeAABB = FBox::BuildAABB(position, FVector(10000.f, 10000.f, 5000.f));
+	auto foliageVolumeAABB = FBox::BuildAABB(position, extent);
 	ProceduralFoliageVolume->GetBrushComponent()->Bounds = foliageVolumeAABB;
 }
 
@@ -60,7 +60,7 @@ void UGenFoliage::Spawn(UGenHeight* heightGenerator, FFoliageGenerationOptions o
 		InstancedFoliageActor->AddFoliageType(instance.Key, &info);
 		
 		TArray<const FFoliageInstance*> instances;
-		for (const FFoliageInstance& idk : instance.Value) instances.Add(&idk);
+		for (const FFoliageInstance& newInstance : instance.Value) instances.Add(&newInstance);
 
 		info->AddInstances(instance.Key, instances);
 		info->Refresh(true, false);

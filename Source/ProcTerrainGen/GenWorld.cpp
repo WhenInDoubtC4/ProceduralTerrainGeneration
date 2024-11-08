@@ -38,6 +38,7 @@ void AGenWorld::Tick(float DeltaTime)
 
 void AGenWorld::GenerateTerrain()
 {
+	FoliageGenerator->Clear();
 	TerrainMesh->ClearAllMeshSections();
 
 	HeightGenerator->Initialize(GenOptions.xSections, GenOptions.ySections, GenOptions.xVertexCount, GenOptions.yVertexCount, GenOptions.edgeSize);
@@ -342,10 +343,7 @@ void AGenWorld::GenerateNextTBN()
 
 	if (TBNQueue.IsEmpty())
 	{
-		float halfsize = GenOptions.edgeSize * 0.5f;
-		FVector half(GenOptions.xSections * GenOptions.xVertexCount * GenOptions.edgeSize * .5f, GenOptions.ySections * GenOptions.yVertexCount * GenOptions.edgeSize * .5f, 0.f);
-		FoliageGenerator->UpdateBounds(half , half);
-		RunGlobalFilters();
+		OnTBNCalculationDone();
 
 		return;
 	}
@@ -394,14 +392,18 @@ void AGenWorld::GenerateNextTBN()
 	});
 }
 
+void AGenWorld::OnTBNCalculationDone()
+{
+	FVector half(GenOptions.xSections * GenOptions.xVertexCount * GenOptions.edgeSize * .5f, GenOptions.ySections * GenOptions.yVertexCount * GenOptions.edgeSize * .5f, 0.f);
+	FoliageGenerator->UpdateBounds(half, half + (FVector::UpVector * 20000.f));
+	RunGlobalFilters();
+}
+
 void AGenWorld::RunGlobalFilters()
 {
 	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [=, this]
 	{
 		HeightGenerator->Erode();
-		//HeightGenerator->ParticleBasedErosion();
-		//HeightGenerator->Combo();
-		//HeightGenerator->GlobalSmooth();
 
 		AsyncTask(ENamedThreads::GameThread, [=, this]
 		{
@@ -423,7 +425,7 @@ void AGenWorld::UpdateNextSectionPost()
 {
 	if (PostSectionQueue.IsEmpty())
 	{
-		UpdateFoliage();
+		OnAllSectionsUpdated();
 		return;
 	}
 
@@ -472,4 +474,9 @@ void AGenWorld::UpdateNextSectionPost()
 			UpdateNextSectionPost();
 		});
 	});
+}
+
+void AGenWorld::OnAllSectionsUpdated()
+{
+	UpdateFoliage();
 }
