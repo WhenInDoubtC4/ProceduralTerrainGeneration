@@ -17,6 +17,10 @@ AGenWorld::AGenWorld()
 
 	HeightGenerator = CreateDefaultSubobject<UGenHeight>("Height Generator");
 	FoliageGenerator = CreateDefaultSubobject<UGenFoliage>("Foliage generator");
+	GenerationStats = CreateDefaultSubobject<UGenStats>("Generation statistics");
+
+	HeightGenCounter = GenerationStats->AddCounter(TEXT("HeightmapGen"));
+	TBNCalcCounter = GenerationStats->AddCounter(TEXT("TBNCalculation"));
 }
 
 // Called when the game starts or when spawned
@@ -42,6 +46,8 @@ void AGenWorld::GenerateTerrain()
 	FoliageGenerator->Clear();
 	TerrainMesh->ClearAllMeshSections();
 
+	GenerationStats->ResetAllCounters();
+
 	HeightGenerator->Initialize(GenOptions.xSections, GenOptions.ySections, GenOptions.xVertexCount, GenOptions.yVertexCount, GenOptions.edgeSize);
 
 	for (int32 y = 0; y < GenOptions.ySections; y++)
@@ -52,6 +58,7 @@ void AGenWorld::GenerateTerrain()
 		}
 	}
 
+	HeightGenCounter->Start();
 	GenerateNextSection();
 }
 
@@ -89,6 +96,11 @@ void AGenWorld::UpdateFoliage()
 }
 
 void AGenWorld::CalculateSectionTBN(const TArray<FVector>& secVertices, const TArray<int32>& secIndices, const TArray<FVector2D>& secUVs, TArray<FVector>& outNormals, TArray<FProcMeshTangent>& outTangents)
+{
+	CalculateSectionTBN_Impl(secVertices, secIndices, secUVs, outNormals, outTangents);
+}
+
+void AGenWorld::CalculateSectionTBN_Impl(const TArray<FVector>& secVertices, const TArray<int32>& secIndices, const TArray<FVector2D>& secUVs, TArray<FVector>& outNormals, TArray<FProcMeshTangent>& outTangents)
 {
 	TArray<FVector> intTangents;
 	TArray<FVector> intNormals;
@@ -148,12 +160,17 @@ void AGenWorld::CalculateSectionTBN(const TArray<FVector>& secVertices, const TA
 
 void AGenWorld::GenerateNextSection()
 {
+	GenerateNextSection_Impl();
+}
+
+void AGenWorld::GenerateNextSection_Impl()
+{
 	vertices.Empty();
 	triangles.Empty();
 	uvs.Empty();
 	//normals.Empty();
 	//tangents.Empty();
-	
+
 	//All sections generated
 	if (SectionQueue.IsEmpty())
 	{
@@ -204,8 +221,8 @@ void AGenWorld::GenerateNextSection()
 			if (hasXBorder)
 			{
 				FVector borderVertex;
-				borderVertex.X = GenOptions.xVertexCount * GenOptions.edgeSize + xSection * (GenOptions.xVertexCount)*GenOptions.edgeSize;
-				borderVertex.Y = y * GenOptions.edgeSize + ySection * (GenOptions.yVertexCount)*GenOptions.edgeSize;
+				borderVertex.X = GenOptions.xVertexCount * GenOptions.edgeSize + xSection * (GenOptions.xVertexCount) * GenOptions.edgeSize;
+				borderVertex.Y = y * GenOptions.edgeSize + ySection * (GenOptions.yVertexCount) * GenOptions.edgeSize;
 				borderVertex.Z = heightData[y * GenOptions.xVertexCount + GenOptions.xVertexCount - 1];
 
 				vertices.Add(borderVertex);
@@ -222,8 +239,8 @@ void AGenWorld::GenerateNextSection()
 				float xValue = x * GenOptions.edgeSize;
 				float yValue = GenOptions.yVertexCount * GenOptions.edgeSize;
 
-				xValue += xSection * (GenOptions.xVertexCount)*GenOptions.edgeSize;
-				yValue += ySection * (GenOptions.yVertexCount)*GenOptions.edgeSize;
+				xValue += xSection * (GenOptions.xVertexCount) * GenOptions.edgeSize;
+				yValue += ySection * (GenOptions.yVertexCount) * GenOptions.edgeSize;
 
 				float heightValue = heightData[(GenOptions.yVertexCount - 1) * GenOptions.xVertexCount + x];
 
@@ -237,8 +254,8 @@ void AGenWorld::GenerateNextSection()
 			if (hasXBorder)
 			{
 				FVector borderVertex;
-				borderVertex.X = GenOptions.xVertexCount * GenOptions.edgeSize + xSection * (GenOptions.xVertexCount)*GenOptions.edgeSize;
-				borderVertex.Y = GenOptions.yVertexCount * GenOptions.edgeSize + ySection * (GenOptions.yVertexCount)*GenOptions.edgeSize;
+				borderVertex.X = GenOptions.xVertexCount * GenOptions.edgeSize + xSection * (GenOptions.xVertexCount) * GenOptions.edgeSize;
+				borderVertex.Y = GenOptions.yVertexCount * GenOptions.edgeSize + ySection * (GenOptions.yVertexCount) * GenOptions.edgeSize;
 				borderVertex.Z = heightData[(GenOptions.yVertexCount - 1) * GenOptions.xVertexCount + GenOptions.xVertexCount - 1];
 
 				vertices.Add(borderVertex);
@@ -314,11 +331,11 @@ void AGenWorld::GenerateNextSection()
 				triangles.Add(startIndex + 1); //(1, 0)
 			}
 		}
-		
+
 		AsyncTask(ENamedThreads::GameThread, [&]()
-		{
-			TerrainSectionReady.Broadcast();
-		});
+			{
+				TerrainSectionReady.Broadcast();
+			});
 	});
 }
 
@@ -332,7 +349,11 @@ void AGenWorld::OnNextSectionReady()
 
 void AGenWorld::CalculateTerrainTBN()
 {
+	HeightGenCounter->Stop();
+
 	for (int32 i = 0; i < GenOptions.xSections * GenOptions.ySections; i++) TBNQueue.Enqueue(i);
+
+	TBNCalcCounter->Start();
 
 	GenerateNextTBN();
 }
@@ -395,6 +416,8 @@ void AGenWorld::GenerateNextTBN()
 
 void AGenWorld::OnTBNCalculationDone()
 {
+	TBNCalcCounter->Stop();
+
 	FVector half(GenOptions.xSections * GenOptions.xVertexCount * GenOptions.edgeSize * .5f, GenOptions.ySections * GenOptions.yVertexCount * GenOptions.edgeSize * .5f, 0.f);
 	FoliageGenerator->UpdateBounds(half, half + (FVector::UpVector * 20000.f));
 	RunGlobalFilters();
@@ -480,4 +503,11 @@ void AGenWorld::UpdateNextSectionPost()
 void AGenWorld::OnAllSectionsUpdated()
 {
 	UpdateFoliage();
+
+	//All done
+	FGenStatData resultStats;
+	resultStats.heightGenTime = HeightGenCounter->GetSeconds();
+	resultStats.tbnCalcTime = TBNCalcCounter->GetSeconds();
+
+	OnGenerationFinished.Broadcast(resultStats);
 }

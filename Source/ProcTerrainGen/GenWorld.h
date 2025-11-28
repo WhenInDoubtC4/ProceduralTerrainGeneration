@@ -8,6 +8,7 @@
 #include "KismetProceduralMeshLibrary.h"
 #include "GenHeight.h"
 #include "GenFoliage.h"
+#include "GenStats.h"
 #include "GenWorld.generated.h"
 
 USTRUCT(BlueprintType)
@@ -70,8 +71,21 @@ struct FTerrainMaterialOptions
 	float beachWaterLevel = -500.f;
 };
 
+USTRUCT(BlueprintType)
+struct FGenStatData
+{
+	GENERATED_USTRUCT_BODY()
+
+	UPROPERTY(BlueprintReadWrite)
+	double heightGenTime = 0.;
+
+	UPROPERTY(BlueprintReadWrite)
+	double tbnCalcTime = 0.;
+};
+
 DECLARE_MULTICAST_DELEGATE(FTerrainSectionReady);
 DECLARE_MULTICAST_DELEGATE(FAllTerrainSectionsReady);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FGenerationFinished, FGenStatData, StatData);
 
 UCLASS()
 class PROCTERRAINGEN_API AGenWorld : public AActor
@@ -97,6 +111,9 @@ public:
 	UGenHeight* GetHeightGenerator() const { return HeightGenerator; };
 
 	UFUNCTION(BlueprintCallable)
+	UGenStats* GetGenerationStats() const { return GenerationStats; };
+
+	UFUNCTION(BlueprintCallable)
 	void SetGenerationOptions(FWorldGenerationOptions options) { GenOptions = options; };
 
 	UFUNCTION(BlueprintCallable)
@@ -110,6 +127,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable)
 	void UpdateFoliage();
+
+	UPROPERTY(BlueprintAssignable)
+	FGenerationFinished OnGenerationFinished;
 
 private:
 	//UPROPERTY(EditAnywhere)
@@ -148,14 +168,22 @@ private:
 	UPROPERTY(VisibleAnywhere)
 	UGenFoliage* FoliageGenerator = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintGetter = GetGenerationStats)
+	UGenStats* GenerationStats = nullptr;
+
 	void CalculateSectionTBN(const TArray<FVector>& vertices, const TArray<int32>& indices, const TArray<FVector2D>& uvs, TArray<FVector>& normals, TArray<FProcMeshTangent>& tangents);
+	void CalculateSectionTBN_Impl(const TArray<FVector>& vertices, const TArray<int32>& indices, const TArray<FVector2D>& uvs, TArray<FVector>& normals, TArray<FProcMeshTangent>& tangents);
 
 	TQueue<TPair<uint32, uint32>> SectionQueue;
 	void GenerateNextSection();
+	void GenerateNextSection_Impl();
+
 	void OnNextSectionReady();
+
 	void CalculateTerrainTBN();
 	TQueue<uint32> TBNQueue;
 	void GenerateNextTBN();
+	
 	void OnTBNCalculationDone();
 
 	FTerrainSectionReady TerrainSectionReady;
@@ -173,4 +201,8 @@ private:
 	TQueue<uint32> PostSectionQueue;
 	void UpdateNextSectionPost();
 	void OnAllSectionsUpdated();
+
+	//Counters
+	UStatCounter* HeightGenCounter = nullptr;
+	UStatCounter* TBNCalcCounter = nullptr;
 };
