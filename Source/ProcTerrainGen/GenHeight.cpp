@@ -195,6 +195,7 @@ void UGenHeight::ParticleBasedErosion()
 
 			//Discard if normal is below an angle tolerance (to avoid weird sediment piles on (almost) flat sutfaces)
 			if (normal.Dot(FVector::UpVector) > angleTolerance) break;
+			UE_LOG(LogTemp, Warning, TEXT("%f"), normal.GetAbs().Dot(FVector::UpVector));
 
 			currentParticle.velocity += Ka * FVector2D(normal.X, normal.Y);
 
@@ -447,6 +448,12 @@ float UGenHeight::CalculateHeightValue(const FVector2D& position)
 
 float UGenHeight::NormalizeHeightValue(float heightValue)
 {
+	if (GenOptions.islandModifier)
+	{
+		heightValue += 1000.f;
+		heightValue -= GenOptions.islandWaterLevelOffset;
+	}
+
 	heightValue /= (GenOptions.step1Amplitude + GenOptions.step2Amplitude);
 
 	heightValue *= .5f;
@@ -476,10 +483,7 @@ FVector UGenHeight::GetNormal(int32 globalIndex)
 	float top = globalIndex - width >= 0 ? HeightData[globalIndex - width] : current;
 	float bottom = globalIndex + width < HeightData.Num() ? HeightData[globalIndex + width] : current;
 
-	float latDiff = right - left;
-	float longDiff = bottom - top;
-
-	return FVector(latDiff, longDiff, 4.f * (latDiff + longDiff)).GetSafeNormal();
+	return -FVector(2.f * (right - left), 2.f * (bottom - top), -4.f).GetSafeNormal();
 }
 
 void UGenHeight::GetPositionRangeF(float xPos, float yPos, int32& outXMin, int32& outXMax, int32& outYMin, int32& outYMax)
