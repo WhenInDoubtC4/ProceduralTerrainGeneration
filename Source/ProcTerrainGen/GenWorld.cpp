@@ -27,7 +27,8 @@ void AGenWorld::BeginPlay()
 	TerrainSectionReady.AddUObject(this, &AGenWorld::OnNextSectionReady);
 	AllTerrainSectionsReady.AddUObject(this, &AGenWorld::CalculateTerrainTBN);
 
-	GenerateTerrain();
+	//Do not start generating right after startup
+	//GenerateTerrain();
 }
 
 // Called every frame
