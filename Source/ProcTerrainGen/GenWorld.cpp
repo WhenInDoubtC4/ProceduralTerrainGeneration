@@ -97,7 +97,9 @@ void AGenWorld::UpdateFoliage()
 
 void AGenWorld::CalculateSectionTBN(const TArray<FVector>& secVertices, const TArray<int32>& secIndices, const TArray<FVector2D>& secUVs, TArray<FVector>& outNormals, TArray<FProcMeshTangent>& outTangents)
 {
-	CalculateSectionTBN_Impl(secVertices, secIndices, secUVs, outNormals, outTangents);
+	//CalculateSectionTBN_Impl(secVertices, secIndices, secUVs, outNormals, outTangents);
+
+	CalculateSectionTBN_Intrin(secVertices, secIndices, secUVs, outNormals, outTangents);
 }
 
 void AGenWorld::CalculateSectionTBN_Impl(const TArray<FVector>& secVertices, const TArray<int32>& secIndices, const TArray<FVector2D>& secUVs, TArray<FVector>& outNormals, TArray<FProcMeshTangent>& outTangents)
@@ -158,9 +160,87 @@ void AGenWorld::CalculateSectionTBN_Impl(const TArray<FVector>& secVertices, con
 	}
 }
 
+void AGenWorld::CalculateSectionTBN_Intrin(const TArray<FVector>& secVertices, const TArray<int32>& secIndices, const TArray<FVector2D>& secUVs, TArray<FVector>& outNormals, TArray<FProcMeshTangent>& outTangents)
+{
+	TArray<FVector> intTangents;
+	TArray<FVector> intNormals;
+
+	for (int32 i = 0; i < secVertices.Num(); i++)
+	{
+		intNormals.Add(FVector::ZeroVector);
+		intTangents.Add(FVector::ZeroVector);
+	}
+
+	for (int32 i = 0; i < secIndices.Num(); i += 3)
+	{
+		__m128i indices = _mm_set1_epi32(i);
+		__m128i indexOffsets = _mm_setr_epi32(0, 1, 2, 0);
+		indices = _mm_add_epi32(indices, indexOffsets);
+
+		FVector pos0 = secVertices[secIndices[indices.m128i_i32[0]]];
+		FVector pos1 = secVertices[secIndices[indices.m128i_i32[1]]];
+		FVector pos2 = secVertices[secIndices[indices.m128i_i32[2]]];
+
+		FVector2D tex0 = secUVs[secIndices[indices.m128i_i32[0]]];
+		FVector2D tex1 = secUVs[secIndices[indices.m128i_i32[1]]];
+		FVector2D tex2 = secUVs[secIndices[indices.m128i_i32[2]]];
+
+		__m256 pos12 = _mm256_setr_ps(pos1.X, pos1.Y, pos1.Z, 0, pos2.X, pos2.Y, pos2.Z, 0);
+		__m256 pos00 = _mm256_setr_ps(pos0.X, pos0.Y, pos0.Z, 0, pos0.X, pos0.Y, pos0.Z, 0);
+		__m256 edge12 = _mm256_sub_ps(pos12, pos00);
+
+		__m128 edge1 = _mm256_extractf128_ps(edge12, 0);
+		__m128 edge2 = _mm256_extractf128_ps(edge12, 1);
+
+		__m128 tex12 = _mm_setr_ps(tex1.X, tex1.Y, tex2.X, tex2.Y);
+		__m128 tex00 = _mm_setr_ps(tex0.X, tex0.Y, tex0.X, tex0.Y);
+		__m128 uv12 = _mm_sub_ps(tex12, tex00);
+		__m128 uv12_reversed = _mm_shuffle_ps(uv12, uv12, _MM_SHUFFLE(0, 1, 2, 3));
+
+		__m128 r = _mm_mul_ps(uv12, uv12_reversed);
+		r = _mm_hsub_ps(r, r);
+		r = _mm_rcp_ss(r);
+		r = _mm_broadcastss_ps(r);
+
+		__m128 normal = cross_product_mm(edge2, edge1);
+
+		__m128 uv2y = _mm_shuffle_ps(uv12, uv12, _MM_SHUFFLE(0, 0, 0, 0));
+		__m128 uv1y = _mm_shuffle_ps(uv12, uv12, _MM_SHUFFLE(2, 2, 2, 2));
+
+		edge1 = _mm_mul_ps(edge1, uv2y);
+		edge2 = _mm_mul_ps(edge2, uv1y);
+		__m128 tangent = _mm_sub_ps(edge1, edge2);
+		tangent = _mm_mul_ps(tangent, r);
+
+		FVector normalVector(normal.m128_f32[0], normal.m128_f32[1], normal.m128_f32[2]);
+		FVector tangentVector(tangent.m128_f32[0], tangent.m128_f32[1], tangent.m128_f32[2]);
+
+		intTangents[secIndices[indices.m128i_i32[0]]] += tangentVector;
+		intTangents[secIndices[indices.m128i_i32[1]]] += tangentVector;
+		intTangents[secIndices[indices.m128i_i32[2]]] += tangentVector;
+
+		intNormals[secIndices[indices.m128i_i32[0]]] += normalVector;
+		intNormals[secIndices[indices.m128i_i32[1]]] += normalVector;
+		intNormals[secIndices[indices.m128i_i32[2]]] += normalVector;
+	}
+
+	for (int32 i = 0; i < secVertices.Num(); i++)
+	{
+		FVector n = intNormals[i].GetSafeNormal();
+		outNormals.Add(n);
+
+		FVector t0 = intTangents[i];
+
+		FVector t = t0 - (n * FVector::DotProduct(n, t0));
+
+		outTangents.Add(FProcMeshTangent(t.GetSafeNormal(), false));
+	}
+}
+
 void AGenWorld::GenerateNextSection()
 {
-	GenerateNextSection_Impl();
+	//GenerateNextSection_Impl();
+	GenerateNextSection_Intrin();
 }
 
 void AGenWorld::GenerateNextSection_Impl()
@@ -337,6 +417,202 @@ void AGenWorld::GenerateNextSection_Impl()
 				TerrainSectionReady.Broadcast();
 			});
 	});
+}
+
+void AGenWorld::GenerateNextSection_Intrin()
+{
+	vertices.Empty();
+	triangles.Empty();
+	uvs.Empty();
+	//normals.Empty();
+	//tangents.Empty();
+
+	//All sections generated
+	if (SectionQueue.IsEmpty())
+	{
+		HeightGenerator->DrawTexture();
+		AllTerrainSectionsReady.Broadcast();
+		return;
+	}
+
+	TPair<uint32, uint32> section;
+	SectionQueue.Dequeue(section);
+
+	int32 xSection = section.Key;
+	int32 ySection = section.Value;
+
+	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [=, this]()
+		{
+			FPlatformProcess::Sleep(.1f);
+
+			sectionIndex = ySection * GenOptions.ySections + xSection;
+
+			TArray<float> heightData;
+			HeightGenerator->GenerateHeight(xSection, ySection, heightData);
+
+			bool hasXBorder = xSection < GenOptions.xSections - 1;
+			bool hasYBorder = ySection < GenOptions.ySections - 1;
+
+			//Create vertex and UV arrays
+			for (int32 y = 0; y < GenOptions.yVertexCount; y++)
+			{
+				for (int32 x = 0; x < GenOptions.xVertexCount; x++)
+				{
+					__m128i xy00_int = _mm_setr_epi32(x, y, 0, 0);
+					__m128 xy00 = _mm_cvtepi32_ps(xy00_int);
+
+					__m128 edgeSize = _mm_set1_ps(GenOptions.edgeSize);
+					xy00 = _mm_mul_ps(xy00, edgeSize); //(float) [x,y] * edgeSize
+
+					__m128i offset_int = _mm_setr_epi32(xSection, ySection, 0, 0);
+					__m128i vertexCount_int = _mm_setr_epi32(GenOptions.xVertexCount, GenOptions.yVertexCount, 0, 0);
+					__m128 offset = _mm_cvtepi32_ps(_mm_mullo_epi32(offset_int, vertexCount_int)); //(float) [x,y]section * GenOptions.[x,y]VertexCount
+					offset = _mm_mul_ps(offset, edgeSize); // offset *= edgeSize
+
+					xy00 = _mm_add_ps(xy00, offset); // [x,y] += offset
+
+					//float xValue = x * GenOptions.edgeSize;
+					//float yValue = y * GenOptions.edgeSize;
+
+					//xValue += xSection * (GenOptions.xVertexCount) * GenOptions.edgeSize;
+					//yValue += ySection * (GenOptions.yVertexCount) * GenOptions.edgeSize;
+
+					float heightValue = heightData[y * GenOptions.xVertexCount + x];
+					//float heightValue = 0.f;
+
+					FVector newVertex(xy00.m128_f32[0], xy00.m128_f32[1], heightValue);
+					vertices.Add(newVertex);
+
+					FVector2D uvCoord((float)x, (float)y);
+					uvs.Add(uvCoord);
+				}
+
+				if (hasXBorder)
+				{
+					FVector borderVertex;
+					borderVertex.X = GenOptions.xVertexCount * GenOptions.edgeSize + xSection * (GenOptions.xVertexCount) * GenOptions.edgeSize;
+					borderVertex.Y = y * GenOptions.edgeSize + ySection * (GenOptions.yVertexCount) * GenOptions.edgeSize;
+					borderVertex.Z = heightData[y * GenOptions.xVertexCount + GenOptions.xVertexCount - 1];
+
+					vertices.Add(borderVertex);
+
+					FVector2D uvCoord(GenOptions.xVertexCount, (float)y);
+					uvs.Add(uvCoord);
+				}
+			}
+
+			if (hasYBorder)
+			{
+				for (int32 x = 0; x < GenOptions.xVertexCount; x++)
+				{
+					float xValue = x * GenOptions.edgeSize;
+					float yValue = GenOptions.yVertexCount * GenOptions.edgeSize;
+
+					xValue += xSection * (GenOptions.xVertexCount) * GenOptions.edgeSize;
+					yValue += ySection * (GenOptions.yVertexCount) * GenOptions.edgeSize;
+
+					float heightValue = heightData[(GenOptions.yVertexCount - 1) * GenOptions.xVertexCount + x];
+
+					FVector newVertex(xValue, yValue, heightValue);
+					vertices.Add(newVertex);
+
+					FVector2D uvCoord((float)x, (float)GenOptions.yVertexCount);
+					uvs.Add(uvCoord);
+				}
+
+				if (hasXBorder)
+				{
+					FVector borderVertex;
+					borderVertex.X = GenOptions.xVertexCount * GenOptions.edgeSize + xSection * (GenOptions.xVertexCount) * GenOptions.edgeSize;
+					borderVertex.Y = GenOptions.yVertexCount * GenOptions.edgeSize + ySection * (GenOptions.yVertexCount) * GenOptions.edgeSize;
+					borderVertex.Z = heightData[(GenOptions.yVertexCount - 1) * GenOptions.xVertexCount + GenOptions.xVertexCount - 1];
+
+					vertices.Add(borderVertex);
+
+					FVector2D uvCoord(GenOptions.xVertexCount, (float)GenOptions.yVertexCount);
+					uvs.Add(uvCoord);
+				}
+			}
+
+			//Create triangles (ccw winding order)
+			for (int32 y = 0; y < GenOptions.yVertexCount - 1; y++)
+			{
+				for (int32 x = 0; x < GenOptions.xVertexCount - 1; x++)
+				{
+					int32 startIndex = y * GenOptions.xVertexCount + x;
+
+					if (hasXBorder) startIndex += y;
+
+					int32 offset = hasXBorder ? 1 : 0;
+
+					__m128i t1 = _mm_set1_epi32(startIndex);
+					__m128i t1Offset = _mm_setr_epi32(0, GenOptions.xVertexCount, GenOptions.xVertexCount + 1, 1);
+					__m128i t1Indices = _mm_setr_epi32(0, offset, offset, 0);
+
+					t1Offset = _mm_add_epi32(t1Offset, t1Indices);
+					t1 = _mm_add_epi32(t1, t1Offset); //[startIndex, startIndex + GenOptions.xVertexCount + offset, startIndex + GenOptions.xVertexCount + 1 + offset, startIndex + 1]
+
+					triangles.Add(t1.m128i_i32[0]); //(0,0)
+					triangles.Add(t1.m128i_i32[1]); //(0, 1)
+					triangles.Add(t1.m128i_i32[3]); //(1,0)
+
+					triangles.Add(t1.m128i_i32[1]); //(0, 1)
+					triangles.Add(t1.m128i_i32[2]); // (1, 1)
+					triangles.Add(t1.m128i_i32[3]); //(1, 0)
+				}
+
+				if (hasXBorder)
+				{
+					int32 startIndex = y * GenOptions.xVertexCount + (GenOptions.xVertexCount - 1) + y;
+
+					triangles.Add(startIndex); //(0,0)
+					triangles.Add(startIndex + GenOptions.xVertexCount + 1); //(0, 1)
+					triangles.Add(startIndex + 1); //(1,0)
+
+					triangles.Add(startIndex + GenOptions.xVertexCount + 1); //(0, 1)
+					triangles.Add(startIndex + GenOptions.xVertexCount + 2); // (1, 1)
+					triangles.Add(startIndex + 1); //(1, 0)
+				}
+			}
+
+			if (hasYBorder)
+			{
+				for (int32 x = 0; x < GenOptions.xVertexCount - 1; x++)
+				{
+					int32 startIndex = (GenOptions.yVertexCount - 1) * GenOptions.xVertexCount + x;
+
+					if (hasXBorder) startIndex += GenOptions.yVertexCount - 1;
+
+					int32 offset = hasXBorder ? 1 : 0;
+
+					triangles.Add(startIndex); //(0,0)
+					triangles.Add(startIndex + GenOptions.xVertexCount + offset); //(0, 1)
+					triangles.Add(startIndex + 1); //(1,0)
+
+					triangles.Add(startIndex + GenOptions.xVertexCount + offset); //(0, 1)
+					triangles.Add(startIndex + GenOptions.xVertexCount + 1 + offset); // (1, 1)
+					triangles.Add(startIndex + 1); //(1, 0)
+				}
+
+				if (hasXBorder)
+				{
+					int32 startIndex = (GenOptions.yVertexCount - 1) * GenOptions.xVertexCount + (GenOptions.xVertexCount - 1) + GenOptions.yVertexCount - 1;
+
+					triangles.Add(startIndex); //(0,0)
+					triangles.Add(startIndex + GenOptions.xVertexCount + 1); //(0, 1)
+					triangles.Add(startIndex + 1); //(1,0)
+
+					triangles.Add(startIndex + GenOptions.xVertexCount + 1); //(0, 1)
+					triangles.Add(startIndex + GenOptions.xVertexCount + 2); // (1, 1)
+					triangles.Add(startIndex + 1); //(1, 0)
+				}
+			}
+
+			AsyncTask(ENamedThreads::GameThread, [&]()
+				{
+					TerrainSectionReady.Broadcast();
+				});
+		});
 }
 
 void AGenWorld::OnNextSectionReady()

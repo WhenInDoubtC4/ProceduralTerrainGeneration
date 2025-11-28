@@ -9,6 +9,7 @@
 #include "GenHeight.h"
 #include "GenFoliage.h"
 #include "GenStats.h"
+#include "IntrinUtil.h"
 #include "GenWorld.generated.h"
 
 USTRUCT(BlueprintType)
@@ -173,10 +174,12 @@ private:
 
 	void CalculateSectionTBN(const TArray<FVector>& vertices, const TArray<int32>& indices, const TArray<FVector2D>& uvs, TArray<FVector>& normals, TArray<FProcMeshTangent>& tangents);
 	void CalculateSectionTBN_Impl(const TArray<FVector>& vertices, const TArray<int32>& indices, const TArray<FVector2D>& uvs, TArray<FVector>& normals, TArray<FProcMeshTangent>& tangents);
+	void CalculateSectionTBN_Intrin(const TArray<FVector>& vertices, const TArray<int32>& indices, const TArray<FVector2D>& uvs, TArray<FVector>& normals, TArray<FProcMeshTangent>& tangents);
 
 	TQueue<TPair<uint32, uint32>> SectionQueue;
 	void GenerateNextSection();
 	void GenerateNextSection_Impl();
+	void GenerateNextSection_Intrin();
 
 	void OnNextSectionReady();
 
