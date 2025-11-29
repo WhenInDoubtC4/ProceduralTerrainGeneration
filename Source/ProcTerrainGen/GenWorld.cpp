@@ -48,6 +48,7 @@ void AGenWorld::GenerateTerrain()
 
 	GenerationStats->ResetAllCounters();
 
+	HeightGenerator->SetEnableOptimizations(GenOptions.enableOptimizations);
 	HeightGenerator->Initialize(GenOptions.xSections, GenOptions.ySections, GenOptions.xVertexCount, GenOptions.yVertexCount, GenOptions.edgeSize);
 
 	for (int32 y = 0; y < GenOptions.ySections; y++)
@@ -97,9 +98,8 @@ void AGenWorld::UpdateFoliage()
 
 void AGenWorld::CalculateSectionTBN(const TArray<FVector>& secVertices, const TArray<int32>& secIndices, const TArray<FVector2D>& secUVs, TArray<FVector>& outNormals, TArray<FProcMeshTangent>& outTangents)
 {
-	//CalculateSectionTBN_Impl(secVertices, secIndices, secUVs, outNormals, outTangents);
-
-	CalculateSectionTBN_Intrin(secVertices, secIndices, secUVs, outNormals, outTangents);
+	if (GenOptions.enableOptimizations) CalculateSectionTBN_Intrin(secVertices, secIndices, secUVs, outNormals, outTangents);
+	else CalculateSectionTBN_Impl(secVertices, secIndices, secUVs, outNormals, outTangents);
 }
 
 void AGenWorld::CalculateSectionTBN_Impl(const TArray<FVector>& secVertices, const TArray<int32>& secIndices, const TArray<FVector2D>& secUVs, TArray<FVector>& outNormals, TArray<FProcMeshTangent>& outTangents)
@@ -239,8 +239,8 @@ void AGenWorld::CalculateSectionTBN_Intrin(const TArray<FVector>& secVertices, c
 
 void AGenWorld::GenerateNextSection()
 {
-	//GenerateNextSection_Impl();
-	GenerateNextSection_Intrin();
+	if (GenOptions.enableOptimizations) GenerateNextSection_Intrin();
+	else GenerateNextSection_Impl();
 }
 
 void AGenWorld::GenerateNextSection_Impl()

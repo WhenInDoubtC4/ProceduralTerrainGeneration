@@ -18,6 +18,9 @@ struct FWorldGenerationOptions
 	GENERATED_USTRUCT_BODY()
 
 	UPROPERTY(BlueprintReadWrite)
+	bool enableOptimizations = false;
+
+	UPROPERTY(BlueprintReadWrite)
 	int32 xVertexCount = 64;
 
 	UPROPERTY(BlueprintReadWrite)

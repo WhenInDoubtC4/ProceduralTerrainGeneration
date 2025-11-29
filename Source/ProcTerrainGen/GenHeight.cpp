@@ -68,8 +68,8 @@ void UGenHeight::Erode()
 //https://dl-acm-org.cobalt.champlain.edu/doi/10.1145/74334.74337
 void UGenHeight::GridBasedErosion()
 {
-	//GridBasedErosion_Impl();
-	GridBasedErosion_Intrin();
+	if (EnableOptimizations) GridBasedErosion_Intrin();
+	else GridBasedErosion_Impl();
 }
 
 void UGenHeight::GridBasedErosion_Impl()
@@ -326,8 +326,8 @@ void UGenHeight::GridBasedErosion_Intrin()
 
 void UGenHeight::ParticleBasedErosion()
 {
-	//ParticleBasedErosion_Impl();
-	ParticleBasedErosion_Intrin();
+	if (EnableOptimizations) ParticleBasedErosion_Intrin();
+	else ParticleBasedErosion_Impl();
 }
 
 void UGenHeight::ParticleBasedErosion_Impl()
@@ -362,14 +362,14 @@ void UGenHeight::ParticleBasedErosion_Impl()
 
 		while (currentParticle.waterVolume > 0.f)
 		{
-			FVector normal = GetNormalF(currentParticle.position.X, currentParticle.position.Y);
-			if (normal == FVector::ZeroVector) break;
+			FVector normal3 = GetNormalF(currentParticle.position.X, currentParticle.position.Y);
+			FVector2D normal(normal3.X, normal3.Y);
 
 			//Discard if normal is below an angle tolerance (to avoid weird sediment piles on (almost) flat sutfaces)
-			if (normal.Dot(FVector::UpVector) > angleTolerance) break;
-			UE_LOG(LogTemp, Warning, TEXT("%f"), normal.GetAbs().Dot(FVector::UpVector));
+			//if (normal.Dot(FVector::UpVector) > angleTolerance) break;
+			//UE_LOG(LogTemp, Warning, TEXT("%f"), normal.GetAbs().Dot(FVector::UpVector));
 
-			currentParticle.velocity += Ka * FVector2D(normal.X, normal.Y);
+			currentParticle.velocity += Ka * normal;
 
 			currentParticle.velocity *= (1.f - Kf);
 

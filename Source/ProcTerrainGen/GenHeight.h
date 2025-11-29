@@ -137,6 +137,8 @@ public:
 
 	bool HeightfieldCast(float xPos, float yPos, float& outHeight, FVector& outNormal);
 
+	void SetEnableOptimizations(bool enable) { EnableOptimizations = enable; };
+	
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
@@ -148,6 +150,8 @@ private:
 	uint32 ySize;
 	float vertexSize;
 	TArray<float> HeightData;
+
+	bool EnableOptimizations = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintGetter = GetHeightmapTexture)
 	UTexture2D* HeightmapTexture = nullptr;
