@@ -223,7 +223,7 @@ void UGenHeight::GridBasedErosion_Intrin()
 			__m128 waterFlow = _mm_sub_ps(currentLevel, adjacentWaterLevel); //for each delta
 			waterFlow = _mm_min_ps(currentWater, waterFlow);
 
-			__m128 waterFlowAlpha = is_negative_mm(waterFlow); 
+			__m128 waterFlowAlpha = mm128_is_negative(waterFlow); 
 
 			//waterFlowAlpha 0 if waterFlow > 0 -- HIGH WATER
 				__m128 di_newWater_highWater = _mm_mul_ps(_mm_set1_ps(-1.f), waterFlow);
@@ -231,7 +231,7 @@ void UGenHeight::GridBasedErosion_Intrin()
 			
 				__m128 c = _mm_mul_ps(_mm_set1_ps(Kc), waterFlow);
 				__m128 sedimentLevel = _mm_sub_ps(_mm_set1_ps(sediment[i]), c);
-				__m128 sedimentAlpha = is_negative_mm(sedimentLevel);
+				__m128 sedimentAlpha = mm128_is_negative(sedimentLevel);
 			
 					//sedimentAlpha 0 if sediment > c -- HIGH SEDIMENT
 					__m128 dai_newSediment_highSediment = c;
@@ -243,9 +243,9 @@ void UGenHeight::GridBasedErosion_Intrin()
 					__m128 di_newHeight_lowSediment = _mm_mul_ps(_mm_set1_ps(-Ks), sedimentLevel);
 					__m128 i_newSediment_lowSediment = _mm_set1_ps(0.f);
 
-				__m128 dai_newSediment = lerp_mm(dai_newSediment_highSediment, dai_newSediment_lowSediment, sedimentAlpha);
-				__m128 di_newHeight = lerp_mm(di_newHeight_highSediment, di_newHeight_lowSediment, sedimentAlpha);
-				__m128 di_newSediment = lerp_mm(di_newSediment_highSediment, i_newSediment_lowSediment, sedimentAlpha);
+				__m128 dai_newSediment = mm128_lerp(dai_newSediment_highSediment, dai_newSediment_lowSediment, sedimentAlpha);
+				__m128 di_newHeight = mm128_lerp(di_newHeight_highSediment, di_newHeight_lowSediment, sedimentAlpha);
+				__m128 di_newSediment = mm128_lerp(di_newSediment_highSediment, i_newSediment_lowSediment, sedimentAlpha);
 
 			//waterFlowAlpha 1 if waterFlow < 0 -- LOW WATER
 			float kdsi = Kd* sediment[i];
@@ -253,10 +253,10 @@ void UGenHeight::GridBasedErosion_Intrin()
 			__m128 di_newSediment_lowWater = _mm_set1_ps(-kdsi);
 
 			//lerp(highwater, lowwater)
-			__m128 di_newHeight_final = lerp_mm(di_newHeight, di_newHeight_lowWater, waterFlowAlpha);
-			__m128 dai_newWater_final = lerp_mm(dai_newWater_highWater, _mm_set1_ps(0.f), waterFlowAlpha);
-			__m128 dai_newSediment_final = lerp_mm(dai_newSediment, _mm_set1_ps(0.f), waterFlowAlpha);
-			__m128 di_newSediment_final = lerp_mm(di_newSediment, di_newSediment_lowWater, waterFlowAlpha);
+			__m128 di_newHeight_final = mm128_lerp(di_newHeight, di_newHeight_lowWater, waterFlowAlpha);
+			__m128 dai_newWater_final = mm128_lerp(dai_newWater_highWater, _mm_set1_ps(0.f), waterFlowAlpha);
+			__m128 dai_newSediment_final = mm128_lerp(dai_newSediment, _mm_set1_ps(0.f), waterFlowAlpha);
+			__m128 di_newSediment_final = mm128_lerp(di_newSediment, di_newSediment_lowWater, waterFlowAlpha);
 
 			//apply the deltas
 			di_newHeight_final = _mm_hadd_ps(di_newHeight_final, di_newHeight_final);
@@ -326,6 +326,12 @@ void UGenHeight::GridBasedErosion_Intrin()
 
 void UGenHeight::ParticleBasedErosion()
 {
+	//ParticleBasedErosion_Impl();
+	ParticleBasedErosion_Intrin();
+}
+
+void UGenHeight::ParticleBasedErosion_Impl()
+{
 	struct FErsonionParticle
 	{
 		FVector2D position = FVector2D::ZeroVector;
@@ -393,6 +399,127 @@ void UGenHeight::ParticleBasedErosion()
 	}
 
 	//EnsureSectionsConnect();
+}
+
+void UGenHeight::ParticleBasedErosion_Intrin()
+{
+	//struct FErsonionParticle
+	//{
+	//	FVector2D position = FVector2D::ZeroVector;
+	//	FVector2D velocity = FVector2D::ZeroVector;
+	//	float waterVolume = 0.f;
+	//	float sediment = 0.f;
+	//};
+
+	float Ka = GenOptions.particleErosion_accelerationConsant; //Acceleration constant
+	float Kf = GenOptions.particleErosion_frictionConstant; //Friction constant
+	float Kc = GenOptions.particleErosion_sedimentCarryingCapacity; //Sediment carrying constant
+	float Kd = GenOptions.particleErosion_depositionConstant; //Deposition constant (0-1, inclusive)
+	float Ks = GenOptions.particleErosion_soilSoftnessConstant; //Soil softness constant (0-1, inclusive)
+	float evaporationRate = GenOptions.particleErosion_evaporationRate;
+
+	int32 erosionIterations = 16384;
+
+	float totalWidth = xSections * xSize;
+	float totalHeight = ySections * ySize;
+
+	float angleTolerance = FMath::Cos(FMath::DegreesToRadians(GenOptions.particleErosion_minAngle));
+
+	for (int32 e = 0; e < erosionIterations; e += 4)
+	{
+		__m256 currentVelocity = _mm256_set1_ps(0.f);
+
+		float rp[8];
+		for (int p = 0; p < 8; p++) rp[p] = FMath::RandRange(1.f, totalWidth - 2.f);
+		__m256 currentPosition = _mm256_setr_ps(rp[0], rp[1], rp[2], rp[3], rp[4], rp[5], rp[6], rp[7]);
+
+		__m128 currentWaterVolume = _mm_set1_ps(GenOptions.particleErosion_waterAmount);
+		__m128 currentSediment = _mm_set1_ps(0.f);
+
+		while (mm128_sum(currentWaterVolume) > 0.f)
+		{
+			FVector np[4];
+			for (int p = 0; p < 4; p++) np[p] = GetNormalF(currentPosition.m256_f32[p * 2], currentPosition.m256_f32[p * 2 + 1]);
+
+			__m256 normal = _mm256_setr_ps(np[0].X, np[0].Y, np[1].X, np[1].Y, np[2].X, np[2].Y, np[3].X, np[3].Y);
+
+			__m256 deltaVelocity = _mm256_mul_ps(_mm256_set1_ps(Ka), normal);
+			currentVelocity = _mm256_add_ps(currentVelocity, deltaVelocity);
+			currentVelocity = _mm256_mul_ps(currentVelocity, _mm256_set1_ps(1.f - Kf));
+
+			currentPosition = _mm256_add_ps(currentPosition, currentVelocity);
+			currentPosition = _mm256_min_ps(_mm256_set1_ps(totalWidth - 1.f), currentPosition);
+			currentPosition = _mm256_max_ps(_mm256_set1_ps(0.f), currentPosition);
+
+			__m256 currentVelocityDot = _mm256_pow_ps(currentVelocity, _mm256_set1_ps(2.f));
+			currentVelocityDot = _mm256_hadd_ps(currentVelocityDot, currentVelocityDot);
+			__m128 currentSpeed = _mm256_extractf32x4_ps(currentVelocityDot, 0);
+			currentSpeed = _mm_sqrt_ps(currentSpeed);
+
+			__m128 maxSediment = _mm_mul_ps(currentSpeed, currentWaterVolume);
+			maxSediment = _mm_mul_ps(maxSediment, _mm_set_ps1(Kc));
+
+			__m128 missingSediment = _mm_sub_ps(maxSediment, currentSediment);
+
+			__m128 missingSedimentAlpha = mm128_is_negative(missingSediment);
+			//0 if maxSediment > currentSediment - MISSING
+			missingSediment = _mm_mul_ps(_mm_set1_ps(Ks), missingSediment); //positive
+		
+			//1 if maxSediment < currentSediment - EXCESS
+			__m128 excessSediment = _mm_mul_ps(_mm_set1_ps(Kd), missingSediment); //negative
+
+
+			__m128 dSediment = mm128_lerp(missingSediment, excessSediment, missingSedimentAlpha);
+			currentSediment = _mm_add_ps(currentSediment, dSediment);
+			for (int p = 0; p < 4; p++) ModifyHeightF(currentPosition.m256_f32[p * 2], currentPosition.m256_f32[p * 2 + 1], -currentSediment.m128_f32[p]);
+
+			currentWaterVolume = _mm_sub_ps(currentWaterVolume, _mm_set1_ps(evaporationRate));
+		}
+	}
+
+	//for (int32 e = 0; e < erosionIterations; e++)
+	//{
+	//	FErsonionParticle currentParticle;
+	//	currentParticle.waterVolume = GenOptions.particleErosion_waterAmount;
+	//	currentParticle.position = FVector2D(FMath::RandRange(1.f, totalWidth - 2.f), FMath::RandRange(1.f, totalHeight - 2.f));
+
+	//	while (currentParticle.waterVolume > 0.f)
+	//	{
+	//		FVector normal = GetNormalF(currentParticle.position.X, currentParticle.position.Y);
+	//		if (normal == FVector::ZeroVector) break;
+
+	//		//Discard if normal is below an angle tolerance (to avoid weird sediment piles on (almost) flat sutfaces)
+	//		if (normal.Dot(FVector::UpVector) > angleTolerance) break;
+	//		UE_LOG(LogTemp, Warning, TEXT("%f"), normal.GetAbs().Dot(FVector::UpVector));
+
+	//		currentParticle.velocity += Ka * FVector2D(normal.X, normal.Y);
+
+	//		currentParticle.velocity *= (1.f - Kf);
+
+	//		currentParticle.position += currentParticle.velocity;
+	//		if (currentParticle.position.X <= 0.f || currentParticle.position.X >= totalWidth - 1.f || currentParticle.position.Y <= 0.f || currentParticle.position.Y >= totalHeight - 1.f) break;
+
+	//		float maxSediment = Kc * currentParticle.velocity.Length() * currentParticle.waterVolume;
+	//		if (currentParticle.sediment > maxSediment)
+	//		{
+	//			float excessSediment = currentParticle.sediment - maxSediment;
+	//			excessSediment *= Kd;
+
+	//			ModifyHeightF(currentParticle.position.X, currentParticle.position.Y, excessSediment);
+	//			currentParticle.sediment -= excessSediment;
+	//		}
+	//		else
+	//		{
+	//			float missingSediment = maxSediment - currentParticle.sediment;
+	//			missingSediment *= Ks;
+
+	//			ModifyHeightF(currentParticle.position.X, currentParticle.position.Y, -missingSediment);
+	//			currentParticle.sediment += missingSediment;
+	//		}
+
+	//		currentParticle.waterVolume -= evaporationRate;
+	//	}
+	//}
 }
 
 void UGenHeight::ThermalWeathering()

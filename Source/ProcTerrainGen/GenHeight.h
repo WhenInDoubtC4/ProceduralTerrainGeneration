@@ -126,6 +126,9 @@ public:
 	void GridBasedErosion_Intrin();
 
 	void ParticleBasedErosion();
+	void ParticleBasedErosion_Impl();
+	void ParticleBasedErosion_Intrin();
+
 	void ThermalWeathering();
 
 	void GlobalSmooth();

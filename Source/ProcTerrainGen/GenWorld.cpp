@@ -202,7 +202,7 @@ void AGenWorld::CalculateSectionTBN_Intrin(const TArray<FVector>& secVertices, c
 		r = _mm_rcp_ss(r);
 		r = _mm_broadcastss_ps(r);
 
-		__m128 normal = cross_product_mm(edge2, edge1);
+		__m128 normal = mm128_cross_product(edge2, edge1);
 
 		__m128 uv2y = _mm_shuffle_ps(uv12, uv12, _MM_SHUFFLE(0, 0, 0, 0));
 		__m128 uv1y = _mm_shuffle_ps(uv12, uv12, _MM_SHUFFLE(2, 2, 2, 2));
