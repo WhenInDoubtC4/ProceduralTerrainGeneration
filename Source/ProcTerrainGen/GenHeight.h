@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Engine/Texture2D.h"
+#include "IntrinUtil.h"
 #include "GenHeight.generated.h"
 
 UENUM(BlueprintType)
@@ -121,6 +122,9 @@ public:
 
 	void Erode();
 	void GridBasedErosion();
+	void GridBasedErosion_Impl();
+	void GridBasedErosion_Intrin();
+
 	void ParticleBasedErosion();
 	void ThermalWeathering();
 

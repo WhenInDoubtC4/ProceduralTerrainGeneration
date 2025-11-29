@@ -68,6 +68,12 @@ void UGenHeight::Erode()
 //https://dl-acm-org.cobalt.champlain.edu/doi/10.1145/74334.74337
 void UGenHeight::GridBasedErosion()
 {
+	//GridBasedErosion_Impl();
+	GridBasedErosion_Intrin();
+}
+
+void UGenHeight::GridBasedErosion_Impl()
+{
 	int32 erosionIterations = GenOptions.gridErosion_iterations;
 	int32 rainfallInterval = GenOptions.gridErosion_rainfallInterval;
 	float rainfall = GenOptions.gridErosion_rainfall;
@@ -140,6 +146,166 @@ void UGenHeight::GridBasedErosion()
 					}
 				}
 			}
+		}
+
+		float additionalRainfall = e % rainfallInterval == 0 ? rainfall : 0.f;
+
+		for (int32 i = 0; i < HeightData.Num(); i++)
+		{
+			HeightData[i] += FMath::Clamp(newHeight[i], -10.f, 10.f);
+			water[i] = newWater[i] + additionalRainfall;
+			sediment[i] = newSediment[i];
+
+
+			newHeight[i] = 0.f;
+			newWater[i] = 0.f;
+			newSediment[i] = 0.f;
+		}
+	}
+}
+
+void UGenHeight::GridBasedErosion_Intrin()
+{
+	int32 erosionIterations = GenOptions.gridErosion_iterations;
+	int32 rainfallInterval = GenOptions.gridErosion_rainfallInterval;
+	float rainfall = GenOptions.gridErosion_rainfall;
+
+	float Kd = GenOptions.gridErosion_depositionConstant;
+	float Kc = GenOptions.gridErosion_sedimentCapacity;
+	float Ks = GenOptions.gridErosion_soilSoftness;
+
+	TArray<float> water;
+	TArray<float> sediment;
+
+	TArray<float> newHeight;
+	TArray<float> newWater;
+	TArray<float> newSediment;
+
+	for (int32 i = 0; i < HeightData.Num(); i++)
+	{
+		water.Add(rainfall);
+		newWater.Add(0.f);
+
+		sediment.Add(0.f);
+		newSediment.Add(0.f);
+
+		newHeight.Add(0.f);
+	}
+
+	int32 width = xSections * xSize;
+	//TArray<int32> deltas;
+	//deltas.Add(-1);
+	//deltas.Add(1);
+	//deltas.Add(-width);
+	//deltas.Add(width);
+
+	__m128i deltas = _mm_setr_epi32(-1, 1, -width, width);
+
+	for (int32 e = 0; e < erosionIterations; e++)
+	{
+		for (int32 i = 0; i < HeightData.Num(); i++)
+		{
+			__m128i adjacentIndices = _mm_set1_epi32(i);
+			adjacentIndices = _mm_add_epi32(adjacentIndices, deltas);
+
+			//Clamp between 0 and HeightData.Num
+			adjacentIndices = _mm_max_epi32(_mm_set1_epi32(0), adjacentIndices);
+			adjacentIndices = _mm_min_epi32(_mm_set1_epi32(HeightData.Num() - 1), adjacentIndices);
+
+			__m128 currentWater = _mm_set1_ps(water[i]);
+			__m128 currentHeight = _mm_set1_ps(HeightData[i]);
+			__m128 currentLevel = _mm_add_ps(currentWater, currentHeight);
+
+			__m128 adjacentWaterLevel = _mm_setr_ps(water[adjacentIndices.m128i_i32[0]], water[adjacentIndices.m128i_i32[1]], water[adjacentIndices.m128i_i32[2]], water[adjacentIndices.m128i_i32[3]]);
+			__m128 adjacentHeight = _mm_setr_ps(HeightData[adjacentIndices.m128i_i32[0]], HeightData[adjacentIndices.m128i_i32[1]], HeightData[adjacentIndices.m128i_i32[2]], HeightData[adjacentIndices.m128i_i32[3]]);
+			adjacentWaterLevel = _mm_add_ps(adjacentWaterLevel, adjacentHeight); //water[ai4] + HeightData[ai4]
+
+			__m128 waterFlow = _mm_sub_ps(currentLevel, adjacentWaterLevel); //for each delta
+			waterFlow = _mm_min_ps(currentWater, waterFlow);
+
+			__m128 waterFlowAlpha = is_negative_mm(waterFlow); 
+
+			//waterFlowAlpha 0 if waterFlow > 0 -- HIGH WATER
+				__m128 di_newWater_highWater = _mm_mul_ps(_mm_set1_ps(-1.f), waterFlow);
+				__m128 dai_newWater_highWater = waterFlow;
+			
+				__m128 c = _mm_mul_ps(_mm_set1_ps(Kc), waterFlow);
+				__m128 sedimentLevel = _mm_sub_ps(_mm_set1_ps(sediment[i]), c);
+				__m128 sedimentAlpha = is_negative_mm(sedimentLevel);
+			
+					//sedimentAlpha 0 if sediment > c -- HIGH SEDIMENT
+					__m128 dai_newSediment_highSediment = c;
+					__m128 di_newHeight_highSediment = _mm_mul_ps(_mm_set1_ps(Kd), sedimentLevel);
+					__m128 di_newSediment_highSediment = _mm_mul_ps(_mm_set1_ps(1.f - Kd), sedimentLevel);
+					//sedimentAlpha 1 if sediment < c -- LOW SEDIMENT
+					__m128 dai_newSediment_lowSediment = _mm_mul_ps(_mm_set1_ps(Ks), sedimentLevel);
+					dai_newSediment_lowSediment = _mm_add_ps(dai_newSediment_lowSediment, _mm_set1_ps(sediment[i]));
+					__m128 di_newHeight_lowSediment = _mm_mul_ps(_mm_set1_ps(-Ks), sedimentLevel);
+					__m128 i_newSediment_lowSediment = _mm_set1_ps(0.f);
+
+				__m128 dai_newSediment = lerp_mm(dai_newSediment_highSediment, dai_newSediment_lowSediment, sedimentAlpha);
+				__m128 di_newHeight = lerp_mm(di_newHeight_highSediment, di_newHeight_lowSediment, sedimentAlpha);
+				__m128 di_newSediment = lerp_mm(di_newSediment_highSediment, i_newSediment_lowSediment, sedimentAlpha);
+
+			//waterFlowAlpha 1 if waterFlow < 0 -- LOW WATER
+			float kdsi = Kd* sediment[i];
+			__m128 di_newHeight_lowWater = _mm_set1_ps(kdsi);
+			__m128 di_newSediment_lowWater = _mm_set1_ps(-kdsi);
+
+			//lerp(highwater, lowwater)
+			__m128 di_newHeight_final = lerp_mm(di_newHeight, di_newHeight_lowWater, waterFlowAlpha);
+			__m128 dai_newWater_final = lerp_mm(dai_newWater_highWater, _mm_set1_ps(0.f), waterFlowAlpha);
+			__m128 dai_newSediment_final = lerp_mm(dai_newSediment, _mm_set1_ps(0.f), waterFlowAlpha);
+			__m128 di_newSediment_final = lerp_mm(di_newSediment, di_newSediment_lowWater, waterFlowAlpha);
+
+			//apply the deltas
+			di_newHeight_final = _mm_hadd_ps(di_newHeight_final, di_newHeight_final);
+			di_newHeight_final = _mm_hadd_ps(di_newHeight_final, di_newHeight_final);
+			newHeight[i] += di_newHeight_final.m128_f32[0];
+
+			di_newSediment_final = _mm_hadd_ps(di_newSediment_final, di_newSediment_final);
+			di_newSediment_final = _mm_hadd_ps(di_newSediment_final, di_newSediment_final);
+			newSediment[i] += di_newSediment_final.m128_f32[0];
+
+			for (int f = 0; f < 4; f++) newWater[adjacentIndices.m128i_i32[f]] += dai_newWater_final.m128_f32[f];
+
+			for (int f = 0; f < 4; f++) newSediment[adjacentIndices.m128i_i32[f]] += dai_newSediment_final.m128_f32[f];
+
+			//for (const int32& delta : deltas)
+			//{
+			//	//TODO: no wraparound
+
+			//	int32 ai = i + delta; //Adjacent index
+			//	if (ai < 0 || ai >= HeightData.Num()) continue;
+
+			//	float waterFlow = FMath::Min(water[i], (water[i] + HeightData[i]) - (water[ai] + HeightData[ai]));
+
+			//	if (waterFlow <= 0.f) -- LOW WATER
+			//	{
+			//		float kdsi = Kd * sediment[i];
+			//		newHeight[i] += kdsi;
+			//		newSediment[i] -= kdsi;
+			//	}
+			//	else -- HIGH WATER
+			//	{
+			//		newWater[i] -= waterFlow;
+			//		newWater[ai] += waterFlow;
+			//		float c = Kc * waterFlow;
+
+			//		if (sediment[i] > c)
+			//		{
+			//			newSediment[ai] += c;
+			//			newHeight[i] += Kd * (sediment[i] - c);
+			//			newSediment[i] += (1.f - Kd) * (sediment[i] - c);
+			//		}
+			//		else
+			//		{
+			//			newSediment[ai] += sediment[i] + Ks * (c - sediment[i]);
+			//			newHeight[i] -= Ks * (c - sediment[i]);
+			//			newSediment[i] += 0.f;
+			//		}
+			//	}
+			//}
 		}
 
 		float additionalRainfall = e % rainfallInterval == 0 ? rainfall : 0.f;
