@@ -120,6 +120,8 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void SetGenerationOptions(FHeightGeneratorOptions options) { GenOptions = options; }
 
+	FHeightGeneratorOptions GetGenerationOptions() const { return GenOptions; };
+
 	void Erode();
 	void GridBasedErosion();
 	void GridBasedErosion_Impl();

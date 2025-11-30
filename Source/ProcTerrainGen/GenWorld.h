@@ -112,6 +112,9 @@ public:
 	void GenerateTerrain();
 
 	UFUNCTION(BlueprintCallable)
+	void BatchGenerate(int32 count);
+
+	UFUNCTION(BlueprintCallable)
 	UGenHeight* GetHeightGenerator() const { return HeightGenerator; };
 
 	UFUNCTION(BlueprintCallable)
@@ -207,6 +210,10 @@ private:
 	TQueue<uint32> PostSectionQueue;
 	void UpdateNextSectionPost();
 	void OnAllSectionsUpdated();
+
+	bool BatchGenerationEnabled = false;
+	int32 BatchIndex = 0;
+	TArray<float> BatchSeeds;
 
 	//Counters
 	UStatCounter* HeightGenCounter = nullptr;

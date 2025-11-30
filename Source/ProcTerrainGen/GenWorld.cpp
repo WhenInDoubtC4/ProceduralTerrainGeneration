@@ -43,10 +43,12 @@ void AGenWorld::Tick(float DeltaTime)
 
 void AGenWorld::GenerateTerrain()
 {
+	BatchGenerationEnabled = false;
+
 	FoliageGenerator->Clear();
 	TerrainMesh->ClearAllMeshSections();
 
-	GenerationStats->ResetAllCounters();
+	GenerationStats->ResetAllCounters(true);
 
 	HeightGenerator->SetEnableOptimizations(GenOptions.enableOptimizations);
 	HeightGenerator->Initialize(GenOptions.xSections, GenOptions.ySections, GenOptions.xVertexCount, GenOptions.yVertexCount, GenOptions.edgeSize);
@@ -61,6 +63,27 @@ void AGenWorld::GenerateTerrain()
 
 	HeightGenCounter->Start();
 	GenerateNextSection();
+}
+
+void AGenWorld::BatchGenerate(int32 count)
+{
+	BatchIndex = count;
+
+	//Precompute seeds (do not reset)
+	if (BatchSeeds.Num() != count)
+	{
+		for (int32 i = 0; i < count; i++)
+		{
+			BatchSeeds.Add(FMath::RandRange(0.f, 9999.f));
+		}
+	}
+
+	FHeightGeneratorOptions newSeedOptions = HeightGenerator->GetGenerationOptions();
+	newSeedOptions.seed = BatchSeeds[BatchIndex - 1];
+	HeightGenerator->SetGenerationOptions(newSeedOptions);
+
+	GenerateTerrain();
+	BatchGenerationEnabled = true;
 }
 
 void AGenWorld::UpdateMaterial(FTerrainMaterialOptions options)
@@ -781,9 +804,37 @@ void AGenWorld::OnAllSectionsUpdated()
 	UpdateFoliage();
 
 	//All done
-	FGenStatData resultStats;
-	resultStats.heightGenTime = HeightGenCounter->GetSeconds();
-	resultStats.tbnCalcTime = TBNCalcCounter->GetSeconds();
+	if (!BatchGenerationEnabled || --BatchIndex <= 0)
+	{
+		FGenStatData resultStats;
+		resultStats.heightGenTime = HeightGenCounter->GetSeconds();
+		resultStats.tbnCalcTime = TBNCalcCounter->GetSeconds();
 
-	OnGenerationFinished.Broadcast(resultStats);
+		OnGenerationFinished.Broadcast(resultStats);
+	}
+	else
+	{
+		FoliageGenerator->Clear();
+		TerrainMesh->ClearAllMeshSections();
+
+		FHeightGeneratorOptions newSeedOptions = HeightGenerator->GetGenerationOptions();
+		newSeedOptions.seed = BatchSeeds[BatchIndex - 1];
+		HeightGenerator->SetGenerationOptions(newSeedOptions);
+
+		HeightGenerator->SetEnableOptimizations(GenOptions.enableOptimizations);
+		HeightGenerator->Initialize(GenOptions.xSections, GenOptions.ySections, GenOptions.xVertexCount, GenOptions.yVertexCount, GenOptions.edgeSize);
+
+		for (int32 y = 0; y < GenOptions.ySections; y++)
+		{
+			for (int32 x = 0; x < GenOptions.xSections; x++)
+			{
+				SectionQueue.Enqueue({ x, y });
+			}
+		}
+
+		GenerationStats->AddNewRowToAllCounters();
+
+		HeightGenCounter->Start();
+		GenerateNextSection();
+	}
 }

@@ -10,6 +10,9 @@
 #include "DesktopPlatformModule.h"
 #include "IDesktopPlatform.h"
 #include "Misc/FileHelper.h"
+#include <string>
+#include <sstream>
+#include <iomanip>
 #endif
 
 #include "GenStats.generated.h"
@@ -34,8 +37,10 @@ public:
 
 	UStatCounter* AddCounter(const FName& name);
 
-	void ResetAllCounters();
+	void ResetAllCounters(bool clearSaved = false);
+	void AddNewRowToAllCounters();
 
 private:
 	TArray<UStatCounter*> Counters;
+	TArray<double> SavedCounters;
 };

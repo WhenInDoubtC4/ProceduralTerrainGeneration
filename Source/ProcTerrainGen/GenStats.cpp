@@ -23,13 +23,36 @@ void UGenStats::Save()
 	//Nothing to save
 	if (Counters.IsEmpty()) return;
 
-	FString header;
-	FString values;
+	std::ostringstream dataSStream;
+
+	//Header
 	for (UStatCounter* counter : Counters)
 	{
-		FString counterName = counter->GetName();
-		header += counterName + ",";
+		const FString counterName = counter->GetName();
+		dataSStream << TCHAR_TO_UTF8(*counterName) << ',';
 	}
+	dataSStream << '\n';
+	//First row of data
+	for (UStatCounter* counter : Counters)
+	{
+		dataSStream << std::fixed << std::setprecision(12) << counter->GetSeconds() << ',';
+	}
+	dataSStream << '\n';
+
+	//Save previous rows (if any)
+	if (!SavedCounters.IsEmpty())
+	{
+		for (int32 i = 0; i < SavedCounters.Num(); i++)
+		{
+			if (i % Counters.Num() == 0 && i > 0) dataSStream << '\n';
+
+			dataSStream << std::fixed << std::setprecision(12) << SavedCounters[SavedCounters.Num() - i - 1] << ',';
+		}
+	}
+
+	std::string dataString = dataSStream.str();
+	std::basic_string<TCHAR> dataTString(dataString.begin(), dataString.end());
+	TCHAR* data = dataTString.data();
 
 #ifdef PLATFORM_DESKTOP
 	IDesktopPlatform* desktopPlatform = FDesktopPlatformModule::Get();
@@ -39,7 +62,7 @@ void UGenStats::Save()
 
 	if (fileNames.IsEmpty()) return;
 
-	FFileHelper::SaveStringToFile(FStringView(TEXT("Test, Test2")), *fileNames[0]);
+	FFileHelper::SaveStringToFile(data, *fileNames[0]);
 #endif
 }
 
@@ -52,10 +75,21 @@ UStatCounter* UGenStats::AddCounter(const FName& name)
 	return newCounter;
 }
 
-void UGenStats::ResetAllCounters()
+void UGenStats::ResetAllCounters(bool clearSaved)
 {
 	for (UStatCounter* counter : Counters)
 	{
+		counter->Reset();
+	}
+
+	if (clearSaved) SavedCounters.Empty();
+}
+
+void UGenStats::AddNewRowToAllCounters()
+{
+	for (UStatCounter* counter : Counters)
+	{
+		SavedCounters.Add(counter->GetSeconds());
 		counter->Reset();
 	}
 }
