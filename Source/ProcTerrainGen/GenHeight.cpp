@@ -433,7 +433,7 @@ void UGenHeight::ParticleBasedErosion_Intrin()
 		for (int p = 0; p < 8; p++) rp[p] = FMath::RandRange(1.f, totalWidth - 2.f);
 		__m256 currentPosition = _mm256_setr_ps(rp[0], rp[1], rp[2], rp[3], rp[4], rp[5], rp[6], rp[7]);
 
-		__m128 currentWaterVolume = _mm_set1_ps(GenOptions.particleErosion_waterAmount);
+		__m128 currentWaterVolume = _mm_set1_ps(GenOptions.particleErosion_waterAmount * .25f);
 		__m128 currentSediment = _mm_set1_ps(0.f);
 
 		while (mm128_sum(currentWaterVolume) > 0.f)
@@ -476,50 +476,6 @@ void UGenHeight::ParticleBasedErosion_Intrin()
 			currentWaterVolume = _mm_sub_ps(currentWaterVolume, _mm_set1_ps(evaporationRate));
 		}
 	}
-
-	//for (int32 e = 0; e < erosionIterations; e++)
-	//{
-	//	FErsonionParticle currentParticle;
-	//	currentParticle.waterVolume = GenOptions.particleErosion_waterAmount;
-	//	currentParticle.position = FVector2D(FMath::RandRange(1.f, totalWidth - 2.f), FMath::RandRange(1.f, totalHeight - 2.f));
-
-	//	while (currentParticle.waterVolume > 0.f)
-	//	{
-	//		FVector normal = GetNormalF(currentParticle.position.X, currentParticle.position.Y);
-	//		if (normal == FVector::ZeroVector) break;
-
-	//		//Discard if normal is below an angle tolerance (to avoid weird sediment piles on (almost) flat sutfaces)
-	//		if (normal.Dot(FVector::UpVector) > angleTolerance) break;
-	//		UE_LOG(LogTemp, Warning, TEXT("%f"), normal.GetAbs().Dot(FVector::UpVector));
-
-	//		currentParticle.velocity += Ka * FVector2D(normal.X, normal.Y);
-
-	//		currentParticle.velocity *= (1.f - Kf);
-
-	//		currentParticle.position += currentParticle.velocity;
-	//		if (currentParticle.position.X <= 0.f || currentParticle.position.X >= totalWidth - 1.f || currentParticle.position.Y <= 0.f || currentParticle.position.Y >= totalHeight - 1.f) break;
-
-	//		float maxSediment = Kc * currentParticle.velocity.Length() * currentParticle.waterVolume;
-	//		if (currentParticle.sediment > maxSediment)
-	//		{
-	//			float excessSediment = currentParticle.sediment - maxSediment;
-	//			excessSediment *= Kd;
-
-	//			ModifyHeightF(currentParticle.position.X, currentParticle.position.Y, excessSediment);
-	//			currentParticle.sediment -= excessSediment;
-	//		}
-	//		else
-	//		{
-	//			float missingSediment = maxSediment - currentParticle.sediment;
-	//			missingSediment *= Ks;
-
-	//			ModifyHeightF(currentParticle.position.X, currentParticle.position.Y, -missingSediment);
-	//			currentParticle.sediment += missingSediment;
-	//		}
-
-	//		currentParticle.waterVolume -= evaporationRate;
-	//	}
-	//}
 }
 
 void UGenHeight::ThermalWeathering()

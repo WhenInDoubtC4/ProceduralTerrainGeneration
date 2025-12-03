@@ -85,6 +85,9 @@ struct FGenStatData
 
 	UPROPERTY(BlueprintReadWrite)
 	double tbnCalcTime = 0.;
+
+	UPROPERTY(BlueprintReadWrite)
+	double erosionTime = 0.;
 };
 
 DECLARE_MULTICAST_DELEGATE(FTerrainSectionReady);
@@ -218,4 +221,5 @@ private:
 	//Counters
 	UStatCounter* HeightGenCounter = nullptr;
 	UStatCounter* TBNCalcCounter = nullptr;
+	UStatCounter* ErosionCounter = nullptr;
 };

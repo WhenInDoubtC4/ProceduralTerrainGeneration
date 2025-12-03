@@ -21,6 +21,7 @@ AGenWorld::AGenWorld()
 
 	HeightGenCounter = GenerationStats->AddCounter(TEXT("HeightmapGen"));
 	TBNCalcCounter = GenerationStats->AddCounter(TEXT("TBNCalculation"));
+	ErosionCounter = GenerationStats->AddCounter(TEXT("Erosion"));
 }
 
 // Called when the game starts or when spawned
@@ -726,7 +727,9 @@ void AGenWorld::RunGlobalFilters()
 {
 	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [=, this]
 	{
+		ErosionCounter->Start();
 		HeightGenerator->Erode();
+		ErosionCounter->Stop();
 
 		AsyncTask(ENamedThreads::GameThread, [=, this]
 		{
@@ -809,6 +812,7 @@ void AGenWorld::OnAllSectionsUpdated()
 		FGenStatData resultStats;
 		resultStats.heightGenTime = HeightGenCounter->GetSeconds();
 		resultStats.tbnCalcTime = TBNCalcCounter->GetSeconds();
+		resultStats.erosionTime = ErosionCounter->GetSeconds();
 
 		OnGenerationFinished.Broadcast(resultStats);
 	}
