@@ -495,14 +495,7 @@ void AGenWorld::GenerateNextSection_Intrin()
 
 					xy00 = _mm_add_ps(xy00, offset); // [x,y] += offset
 
-					//float xValue = x * GenOptions.edgeSize;
-					//float yValue = y * GenOptions.edgeSize;
-
-					//xValue += xSection * (GenOptions.xVertexCount) * GenOptions.edgeSize;
-					//yValue += ySection * (GenOptions.yVertexCount) * GenOptions.edgeSize;
-
 					float heightValue = heightData[y * GenOptions.xVertexCount + x];
-					//float heightValue = 0.f;
 
 					FVector newVertex(xy00.m128_f32[0], xy00.m128_f32[1], heightValue);
 					vertices.Add(newVertex);
@@ -660,9 +653,6 @@ void AGenWorld::CalculateTerrainTBN()
 
 void AGenWorld::GenerateNextTBN()
 {
-	/*normals.Empty();
-	tangents.Empty();*/
-
 	if (TBNQueue.IsEmpty())
 	{
 		OnTBNCalculationDone();
@@ -674,9 +664,6 @@ void AGenWorld::GenerateNextTBN()
 	TBNQueue.Dequeue(nextSectionIndex);
 
 	FProcMeshSection* currentSection = TerrainMesh->GetProcMeshSection(nextSectionIndex);
-
-	/*TArray<FVector> normals;
-	TArray<FProcMeshTangent> tangents;*/
 
 	TArray<FVector> extracedVertices;
 	TArray<FVector2D> extracedUVs;

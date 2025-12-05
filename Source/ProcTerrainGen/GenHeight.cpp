@@ -270,42 +270,6 @@ void UGenHeight::GridBasedErosion_Intrin()
 			for (int f = 0; f < 4; f++) newWater[adjacentIndices.m128i_i32[f]] += dai_newWater_final.m128_f32[f];
 
 			for (int f = 0; f < 4; f++) newSediment[adjacentIndices.m128i_i32[f]] += dai_newSediment_final.m128_f32[f];
-
-			//for (const int32& delta : deltas)
-			//{
-			//	//TODO: no wraparound
-
-			//	int32 ai = i + delta; //Adjacent index
-			//	if (ai < 0 || ai >= HeightData.Num()) continue;
-
-			//	float waterFlow = FMath::Min(water[i], (water[i] + HeightData[i]) - (water[ai] + HeightData[ai]));
-
-			//	if (waterFlow <= 0.f) -- LOW WATER
-			//	{
-			//		float kdsi = Kd * sediment[i];
-			//		newHeight[i] += kdsi;
-			//		newSediment[i] -= kdsi;
-			//	}
-			//	else -- HIGH WATER
-			//	{
-			//		newWater[i] -= waterFlow;
-			//		newWater[ai] += waterFlow;
-			//		float c = Kc * waterFlow;
-
-			//		if (sediment[i] > c)
-			//		{
-			//			newSediment[ai] += c;
-			//			newHeight[i] += Kd * (sediment[i] - c);
-			//			newSediment[i] += (1.f - Kd) * (sediment[i] - c);
-			//		}
-			//		else
-			//		{
-			//			newSediment[ai] += sediment[i] + Ks * (c - sediment[i]);
-			//			newHeight[i] -= Ks * (c - sediment[i]);
-			//			newSediment[i] += 0.f;
-			//		}
-			//	}
-			//}
 		}
 
 		float additionalRainfall = e % rainfallInterval == 0 ? rainfall : 0.f;
@@ -365,10 +329,6 @@ void UGenHeight::ParticleBasedErosion_Impl()
 			FVector normal3 = GetNormalF(currentParticle.position.X, currentParticle.position.Y);
 			FVector2D normal(normal3.X, normal3.Y);
 
-			//Discard if normal is below an angle tolerance (to avoid weird sediment piles on (almost) flat sutfaces)
-			//if (normal.Dot(FVector::UpVector) > angleTolerance) break;
-			//UE_LOG(LogTemp, Warning, TEXT("%f"), normal.GetAbs().Dot(FVector::UpVector));
-
 			currentParticle.velocity += Ka * normal;
 
 			currentParticle.velocity *= (1.f - Kf);
@@ -403,14 +363,6 @@ void UGenHeight::ParticleBasedErosion_Impl()
 
 void UGenHeight::ParticleBasedErosion_Intrin()
 {
-	//struct FErsonionParticle
-	//{
-	//	FVector2D position = FVector2D::ZeroVector;
-	//	FVector2D velocity = FVector2D::ZeroVector;
-	//	float waterVolume = 0.f;
-	//	float sediment = 0.f;
-	//};
-
 	float Ka = GenOptions.particleErosion_accelerationConsant; //Acceleration constant
 	float Kf = GenOptions.particleErosion_frictionConstant; //Friction constant
 	float Kc = GenOptions.particleErosion_sedimentCarryingCapacity; //Sediment carrying constant

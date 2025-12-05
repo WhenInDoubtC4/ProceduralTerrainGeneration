@@ -25,13 +25,6 @@ void UGenStats::Save()
 
 	std::ostringstream dataSStream;
 
-	//Header
-	for (UStatCounter* counter : Counters)
-	{
-		const FString counterName = counter->GetName();
-		dataSStream << TCHAR_TO_UTF8(*counterName) << ',';
-	}
-	dataSStream << '\n';
 	//First row of data
 	for (UStatCounter* counter : Counters)
 	{
